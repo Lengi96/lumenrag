@@ -1,0 +1,213 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+enum DocumentStatus {
+  PENDING
+  PROCESSING
+  INDEXED
+  FAILED
+  ARCHIVED
+}
+
+model Organization {
+  id         String       @id @default(cuid())
+  name       String
+  slug       String       @unique
+  workspaces Workspace[]
+  members    Membership[]
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+}
+
+model User {
+  id          String       @id @default(cuid())
+  email       String       @unique
+  name        String?
+  memberships Membership[]
+  messages    Message[]
+  createdAt   DateTime     @default(now())
+}
+
+model Membership {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String
+  role           Role
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+}
+
+model Workspace {
+  id             String         @id @default(cuid())
+  organizationId String
+  name           String
+  slug           String
+  documents      Document[]
+  conversations  Conversation[]
+  searchQueries  SearchQuery[]
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@unique([organizationId, slug])
+}
+
+model Document {
+  id          String         @id @default(cuid())
+  workspaceId String
+  title       String
+  sourceType  String
+  mimeType    String?
+  fileKey     String?
+  checksum    String
+  status      DocumentStatus @default(PENDING)
+  summary     String?
+  metadata    Json?
+  chunks      Chunk[]
+  entities    Entity[]
+  requirements Requirement[]
+  risks       Risk[]
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([workspaceId, status])
+  @@unique([workspaceId, checksum])
+}
+
+model Chunk {
+  id          String   @id @default(cuid())
+  workspaceId String
+  documentId  String
+  index       Int
+  content     String
+  tokenCount  Int
+  pageNumber  Int?
+  startOffset Int?
+  endOffset   Int?
+  embedding   Unsupported("vector(1536)")?
+  metadata    Json?
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  evidence    Evidence[]
+
+  @@index([workspaceId])
+  @@index([documentId, index])
+}
+
+model Entity {
+  id          String   @id @default(cuid())
+  workspaceId String
+  documentId  String?
+  name        String
+  type        String
+  description String?
+  aliases     String[]
+  confidence  Float
+  document    Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  evidence    Evidence[]
+
+  @@index([workspaceId, name])
+}
+
+model Relation {
+  id             String @id @default(cuid())
+  workspaceId    String
+  sourceEntityId String
+  targetEntityId String
+  type           String
+  description    String?
+  confidence     Float
+  evidence       Evidence[]
+
+  @@index([workspaceId, sourceEntityId])
+  @@index([workspaceId, targetEntityId])
+}
+
+model Requirement {
+  id          String   @id @default(cuid())
+  workspaceId String
+  documentId  String
+  title       String
+  statement   String
+  priority    String
+  confidence  Float
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, priority])
+}
+
+model Risk {
+  id          String   @id @default(cuid())
+  workspaceId String
+  documentId  String
+  title       String
+  evidence    String
+  severity    String
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, severity])
+}
+
+model Evidence {
+  id         String    @id @default(cuid())
+  workspaceId String
+  chunkId    String
+  entityId   String?
+  relationId String?
+  quote      String
+  startOffset Int?
+  endOffset   Int?
+  confidence Float
+  chunk      Chunk     @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+  entity     Entity?   @relation(fields: [entityId], references: [id], onDelete: SetNull)
+  relation   Relation? @relation(fields: [relationId], references: [id], onDelete: SetNull)
+}
+
+model Conversation {
+  id          String    @id @default(cuid())
+  workspaceId String
+  title       String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  messages    Message[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  userId         String?
+  role           String
+  content        String
+  citations      Json?
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt      DateTime     @default(now())
+}
+
+model SearchQuery {
+  id          String    @id @default(cuid())
+  workspaceId String
+  query       String
+  resultCount Int
+  latencyMs   Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+}
