@@ -48,6 +48,13 @@ Response:
 POST /api/v1/workspaces/:workspaceId/chat
 ```
 
+MVP route:
+
+```http
+POST /api/chat
+POST /api/chat/stream
+```
+
 Response shape:
 
 ```ts
@@ -73,4 +80,13 @@ GET /api/v1/workspaces/:workspaceId/graph
 GET /api/v1/workspaces/:workspaceId/requirements
 GET /api/v1/workspaces/:workspaceId/risks
 POST /api/v1/workspaces/:workspaceId/exports
+```
+
+MVP routes:
+
+```http
+POST /api/documents
+POST /api/search
+POST /api/graph
+POST /api/export
 ```

@@ -72,7 +72,12 @@ The MVP now exposes backend routes that mirror the planned production services:
 - `POST /api/documents` analyzes uploaded files and returns normalized document objects.
 - `POST /api/search` searches across provided workspace documents.
 - `POST /api/chat` returns a grounded answer and citation payload.
+- `POST /api/chat/stream` streams citation and token events via Server-Sent Events.
 - `POST /api/graph` generates a mindmap graph.
 - `POST /api/export` returns a complete workspace export.
 
 These routes are stateless in the MVP. In production they should write through the Prisma repositories and enqueue ingestion jobs.
+
+## Parser Support
+
+The upload route now supports text-like files, PDF and DOCX. PDF extraction uses `pdf-parse`; DOCX extraction uses `mammoth`. Parser metadata is attached to returned document objects so the UI and future persistence layer can inspect how a document was ingested.

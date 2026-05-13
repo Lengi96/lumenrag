@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { analyzeDocument } from "@/lib/knowledge";
+import { parseUploadedFile } from "@/lib/server/document-parser";
+
+export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   const formData = await request.formData();
@@ -11,14 +14,21 @@ export async function POST(request: Request) {
 
   const documents = await Promise.all(
     files.map(async (file) => {
-      const content = await file.text();
-      return analyzeDocument({
+      const parsed = await parseUploadedFile(file);
+      const document = analyzeDocument({
         id: stableId(`${file.name}-${file.size}-${file.lastModified}`),
         title: file.name,
         type: file.type || "text/plain",
         size: file.size,
-        content,
+        content: parsed.content,
       });
+      return {
+        ...document,
+        metadata: {
+          parser: parsed.parser,
+          originalMimeType: file.type || null,
+        },
+      };
     }),
   );
 

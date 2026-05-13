@@ -11,6 +11,7 @@ export type KnowledgeDocument = {
   classification: string;
   createdAt: string;
   status: DocumentStatus;
+  metadata?: Record<string, unknown>;
   chunks: KnowledgeChunk[];
   requirements: Requirement[];
   risks: Risk[];

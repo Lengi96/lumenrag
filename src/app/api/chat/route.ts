@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { generateAnswer, searchDocuments } from "@/lib/knowledge";
+import { OpenAIProvider } from "@/lib/ai/openai-provider";
+import { MissingProviderError } from "@/lib/ai/provider";
+import { buildContextBlock, groundedAnswerSystemPrompt } from "@/lib/rag/prompts";
 import type { KnowledgeDocument } from "@/lib/types";
 
 type ChatBody = {
@@ -15,7 +18,30 @@ export async function POST(request: Request) {
   }
 
   const results = searchDocuments(body.documents ?? [], body.query, 8);
-  const answer = generateAnswer(body.query, results);
+  let answer = generateAnswer(body.query, results);
+  let strategy = "local-hybrid";
+
+  if (process.env.OPENAI_API_KEY && results.length > 0) {
+    try {
+      const provider = new OpenAIProvider();
+      answer = await provider.answer({
+        system: groundedAnswerSystemPrompt,
+        query: body.query,
+        context: buildContextBlock(
+          results.slice(0, 6).map((result) => ({
+            id: result.chunk.id,
+            documentTitle: result.chunk.documentTitle,
+            content: result.chunk.content,
+          })),
+        ),
+      });
+      strategy = "openai-grounded";
+    } catch (error) {
+      if (!(error instanceof MissingProviderError)) {
+        console.error("OpenAI answer generation failed, falling back to local answer", error);
+      }
+    }
+  }
 
   return NextResponse.json({
     answer,
@@ -28,7 +54,7 @@ export async function POST(request: Request) {
       score: result.score,
     })),
     retrieval: {
-      strategy: "local-hybrid",
+      strategy,
       resultCount: results.length,
     },
   });

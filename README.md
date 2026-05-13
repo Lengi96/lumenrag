@@ -7,7 +7,7 @@ It is inspired by graph-based RAG architectures, but implemented as a TypeScript
 ## Current MVP
 
 - Next.js + TypeScript + Tailwind
-- Local document upload for text-like files
+- Document upload for text-like files, PDFs and DOCX files
 - Chunking
 - Keyword/semantic-style search
 - Source-grounded answer generation
@@ -16,7 +16,9 @@ It is inspired by graph-based RAG architectures, but implemented as a TypeScript
 - Risk extraction
 - Automatic tags
 - Interactive mindmap from uploaded documents
-- Workspace export as JSON
+- Browser-local workspace autosave
+- Workspace import/export as JSON
+- Stateless API routes for upload, search, chat, graph, stream and export
 - Prisma schema for production persistence
 - Docker Compose for PostgreSQL, Redis and MinIO
 
@@ -28,6 +30,25 @@ npm run dev
 ```
 
 Open `http://localhost:3000`.
+
+## Optional OpenAI Mode
+
+Create `.env` from `.env.example` and set:
+
+```bash
+OPENAI_API_KEY="..."
+```
+
+When the key is present, `/api/chat` uses OpenAI for grounded answer generation. Without a key, the app falls back to the local deterministic answer generator.
+
+## Supported Uploads
+
+The current parser supports:
+
+- `.txt`, `.md`, `.csv`, `.json`, `.log`, `.xml`, `.yaml`, `.yml`
+- source files such as `.ts`, `.tsx`, `.js`, `.py`, `.java`, `.cs`
+- `.pdf`
+- `.docx`
 
 ## Production Architecture
 

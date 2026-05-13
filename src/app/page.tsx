@@ -6,6 +6,8 @@ import {
   Download,
   FileText,
   GitBranch,
+  HardDrive,
+  History,
   KeyRound,
   Layers3,
   Lock,
@@ -16,13 +18,15 @@ import {
   Sparkles,
   Upload,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MindmapCanvas } from "@/components/MindmapCanvas";
 import { buildMindmap } from "@/lib/knowledge";
 import { sampleDocuments } from "@/lib/sample-data";
 import type { KnowledgeDocument, MindmapNode, SearchResult } from "@/lib/types";
+
+const workspaceStorageKey = "lumenrag.workspace.v1";
 
 export default function Home() {
   const [documents, setDocuments] = useState<KnowledgeDocument[]>(sampleDocuments);
@@ -32,9 +36,37 @@ export default function Home() {
   const [selectedNode, setSelectedNode] = useState<MindmapNode | null>(null);
   const [activeTab, setActiveTab] = useState<"chat" | "documents" | "mindmap" | "architecture">("chat");
   const [isBusy, setIsBusy] = useState(false);
+  const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const graph = useMemo(() => buildMindmap(documents), [documents]);
   const allRequirements = documents.flatMap((document) => document.requirements);
   const allRisks = documents.flatMap((document) => document.risks);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(workspaceStorageKey);
+    if (saved) {
+      try {
+        const payload = JSON.parse(saved) as { documents?: KnowledgeDocument[] };
+        if (Array.isArray(payload.documents)) {
+          queueMicrotask(() => setDocuments(payload.documents ?? sampleDocuments));
+        }
+      } catch {
+        window.localStorage.removeItem(workspaceStorageKey);
+      }
+    }
+    queueMicrotask(() => setWorkspaceLoaded(true));
+  }, []);
+
+  useEffect(() => {
+    if (!workspaceLoaded) return;
+    window.localStorage.setItem(
+      workspaceStorageKey,
+      JSON.stringify({
+        savedAt: new Date().toISOString(),
+        documents,
+      }),
+    );
+  }, [documents, workspaceLoaded]);
 
   async function onUpload(files: FileList | null) {
     if (!files?.length) return;
@@ -96,6 +128,22 @@ export default function Home() {
     URL.revokeObjectURL(url);
   }
 
+  async function importWorkspace(file: File | undefined) {
+    if (!file) return;
+    const payload = JSON.parse(await file.text()) as { documents?: KnowledgeDocument[] };
+    if (Array.isArray(payload.documents)) {
+      setDocuments(payload.documents);
+      setActiveTab("documents");
+    }
+  }
+
+  function resetWorkspace() {
+    setDocuments(sampleDocuments);
+    setResults([]);
+    setAnswer("");
+    window.localStorage.removeItem(workspaceStorageKey);
+  }
+
   return (
     <main className="min-h-screen bg-[#08100f] text-slate-100">
       <div className="grid min-h-screen grid-cols-[280px_1fr] max-lg:grid-cols-1">
@@ -118,10 +166,34 @@ export default function Home() {
               className="hidden"
               type="file"
               multiple
-              accept=".txt,.md,.csv,.json,.log,.xml,.yaml,.yml,.ts,.tsx,.js,.py,.java,.cs"
+              accept=".txt,.md,.csv,.json,.log,.xml,.yaml,.yml,.ts,.tsx,.js,.py,.java,.cs,.pdf,.docx"
               onChange={(event) => void onUpload(event.target.files)}
             />
           </label>
+
+          <div className="mb-5 grid grid-cols-2 gap-2">
+            <button
+              onClick={() => importInputRef.current?.click()}
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-white/10 px-3 py-2 text-xs text-slate-300 transition hover:bg-white/8"
+            >
+              <HardDrive size={14} />
+              Import
+            </button>
+            <button
+              onClick={resetWorkspace}
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-white/10 px-3 py-2 text-xs text-slate-300 transition hover:bg-white/8"
+            >
+              <History size={14} />
+              Reset
+            </button>
+            <input
+              ref={importInputRef}
+              className="hidden"
+              type="file"
+              accept="application/json,.json"
+              onChange={(event) => void importWorkspace(event.target.files?.[0])}
+            />
+          </div>
 
           <nav className="space-y-2">
             {[
@@ -145,6 +217,7 @@ export default function Home() {
 
           <div className="mt-8 space-y-3 text-xs text-slate-400">
             <StatusRow icon={<Database size={14} />} label="Storage" value="Postgres + pgvector ready" />
+            <StatusRow icon={<HardDrive size={14} />} label="Lokal" value="Workspace Autosave aktiv" />
             <StatusRow icon={<Lock size={14} />} label="RBAC" value="Owner/Admin/Editor/Viewer" />
             <StatusRow icon={<Moon size={14} />} label="Theme" value="Dark Mode native" />
             <StatusRow icon={<KeyRound size={14} />} label="API" value="REST/tRPC planned" />
