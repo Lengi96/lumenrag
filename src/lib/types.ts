@@ -45,6 +45,46 @@ export type Risk = {
   severity: "high" | "medium" | "low";
 };
 
+export type TestCase = {
+  id: string;
+  requirementId: string;
+  title: string;
+  gherkin: string;
+  coverage: "covered" | "partial" | "missing";
+  riskLevel: "high" | "medium" | "low";
+};
+
+export type UserStory = {
+  id: string;
+  requirementId: string;
+  title: string;
+  story: string;
+  acceptanceCriteria: string[];
+};
+
+export type KnowledgeGap = {
+  id: string;
+  title: string;
+  evidence: string;
+  severity: "high" | "medium" | "low";
+  recommendation: string;
+};
+
+export type AgentInsight = {
+  id: string;
+  agent: "documentation" | "architecture" | "qa" | "security" | "compliance" | "release";
+  title: string;
+  finding: string;
+  priority: "high" | "medium" | "low";
+};
+
+export type EnterpriseControl = {
+  id: string;
+  area: "RBAC" | "DSGVO" | "Audit" | "Data Classification" | "Local LLM" | "Tenant Isolation";
+  status: "ready" | "planned" | "gap";
+  description: string;
+};
+
 export type Entity = {
   id: string;
   documentId: string;

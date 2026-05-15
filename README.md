@@ -17,9 +17,10 @@ It is inspired by graph-based RAG architectures, but implemented as a TypeScript
 - Automatic tags
 - Interactive mindmap from uploaded documents
 - Browser-local workspace autosave
+- Optional PostgreSQL workspace persistence through Prisma
 - Workspace import/export as JSON
-- Stateless API routes for upload, search, chat, graph, stream and export
-- Prisma schema for production persistence
+- API routes for upload, search, chat, graph, stream, export and workspace storage
+- Prisma schema and migration for PostgreSQL + pgvector
 - Docker Compose for PostgreSQL, Redis and MinIO
 
 ## Development
@@ -30,6 +31,20 @@ npm run dev
 ```
 
 Open `http://localhost:3000`.
+
+## Optional PostgreSQL Persistence
+
+The app works without a database and falls back to browser-local autosave. To enable server-side persistence:
+
+```bash
+cp .env.example .env
+docker compose up -d postgres
+npm run db:generate
+npm run db:migrate
+npm run dev
+```
+
+The UI status panel shows `DB Autosave` when `/api/workspace` can read and write through Prisma. If the database is unavailable, the app automatically falls back to `Browser Autosave`.
 
 ## Optional OpenAI Mode
 
@@ -60,11 +75,10 @@ See:
 
 ## Next Implementation Steps
 
-1. Add Prisma Client and migrations.
-2. Move ingestion from browser to worker jobs.
-3. Add OpenAI embeddings using `text-embedding-3-small`.
-4. Add pgvector retrieval.
-5. Add streaming chat route.
-6. Add Auth.js or OIDC.
-7. Add role-based access checks for organization and workspace scope.
-8. Add source-span highlighting in document preview.
+1. Move ingestion from API request handling to worker jobs.
+2. Add OpenAI embeddings using `text-embedding-3-small`.
+3. Add pgvector retrieval queries over persisted chunks.
+4. Wire `/api/chat/stream` into the chat UI.
+5. Add Auth.js or OIDC.
+6. Add role-based access checks for organization and workspace scope.
+7. Add source-span highlighting in document preview.

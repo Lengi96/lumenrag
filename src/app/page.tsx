@@ -1,7 +1,10 @@
-"use client";
+﻿"use client";
 
 import {
+  AlertTriangle,
   Brain,
+  CheckCircle2,
+  ClipboardCheck,
   Database,
   Download,
   FileText,
@@ -17,16 +20,26 @@ import {
   ShieldCheck,
   Sparkles,
   Upload,
+  Workflow,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MindmapCanvas } from "@/components/MindmapCanvas";
 import { buildMindmap } from "@/lib/knowledge";
+import {
+  buildAgentInsights,
+  buildArchitectureSummary,
+  buildEnterpriseControls,
+  buildTestCases,
+  buildUserStories,
+  findKnowledgeGaps,
+} from "@/lib/insights";
 import { sampleDocuments } from "@/lib/sample-data";
-import type { KnowledgeDocument, MindmapNode, SearchResult } from "@/lib/types";
+import type { KnowledgeDocument, MindmapNode, Requirement, SearchResult, TestCase, UserStory } from "@/lib/types";
 
 const workspaceStorageKey = "lumenrag.workspace.v1";
+type PersistenceMode = "loading" | "database" | "local";
 
 export default function Home() {
   const [documents, setDocuments] = useState<KnowledgeDocument[]>(sampleDocuments);
@@ -34,27 +47,75 @@ export default function Home() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [answer, setAnswer] = useState("");
   const [selectedNode, setSelectedNode] = useState<MindmapNode | null>(null);
-  const [activeTab, setActiveTab] = useState<"chat" | "documents" | "mindmap" | "architecture">("chat");
+  const [activeTab, setActiveTab] = useState<
+    "chat" | "documents" | "mindmap" | "requirements" | "qa" | "risks" | "agents" | "enterprise" | "architecture"
+  >("chat");
   const [isBusy, setIsBusy] = useState(false);
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
+  const [persistenceMode, setPersistenceMode] = useState<PersistenceMode>("loading");
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const graph = useMemo(() => buildMindmap(documents), [documents]);
   const allRequirements = documents.flatMap((document) => document.requirements);
   const allRisks = documents.flatMap((document) => document.risks);
+  const allEntities = documents.flatMap((document) => document.entities);
+  const userStories = useMemo(() => buildUserStories(allRequirements), [allRequirements]);
+  const testCases = useMemo(() => buildTestCases(allRequirements, allRisks), [allRequirements, allRisks]);
+  const knowledgeGaps = useMemo(() => findKnowledgeGaps(documents), [documents]);
+  const agentInsights = useMemo(() => buildAgentInsights(documents), [documents]);
+  const enterpriseControls = useMemo(() => buildEnterpriseControls(documents), [documents]);
+  const architectureSummary = useMemo(() => buildArchitectureSummary(documents), [documents]);
+  const qaCoverage = allRequirements.length
+    ? Math.round((testCases.filter((testCase) => testCase.coverage !== "missing").length / allRequirements.length) * 100)
+    : 0;
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(workspaceStorageKey);
-    if (saved) {
+    let cancelled = false;
+
+    async function loadWorkspace() {
       try {
-        const payload = JSON.parse(saved) as { documents?: KnowledgeDocument[] };
-        if (Array.isArray(payload.documents)) {
-          queueMicrotask(() => setDocuments(payload.documents ?? sampleDocuments));
+        const response = await fetch("/api/workspace", { cache: "no-store" });
+        const payload = (await response.json()) as {
+          mode?: PersistenceMode;
+          documents?: KnowledgeDocument[];
+        };
+
+        if (cancelled) return;
+
+        if (payload.mode === "database") {
+          setPersistenceMode("database");
+          if (Array.isArray(payload.documents) && payload.documents.length > 0) {
+            setDocuments(payload.documents);
+          }
+          setWorkspaceLoaded(true);
+          return;
         }
       } catch {
-        window.localStorage.removeItem(workspaceStorageKey);
+        // Falls DB oder API nicht erreichbar sind, bleibt Browser-Speicher aktiv.
+      }
+
+      const saved = window.localStorage.getItem(workspaceStorageKey);
+      if (saved) {
+        try {
+          const payload = JSON.parse(saved) as { documents?: KnowledgeDocument[] };
+          if (Array.isArray(payload.documents)) {
+            setDocuments(payload.documents);
+          }
+        } catch {
+          window.localStorage.removeItem(workspaceStorageKey);
+        }
+      }
+
+      if (!cancelled) {
+        setPersistenceMode("local");
+        setWorkspaceLoaded(true);
       }
     }
-    queueMicrotask(() => setWorkspaceLoaded(true));
+
+    void loadWorkspace();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -66,7 +127,24 @@ export default function Home() {
         documents,
       }),
     );
-  }, [documents, workspaceLoaded]);
+
+    if (persistenceMode !== "database") return;
+
+    const timeout = window.setTimeout(() => {
+      void fetch("/api/workspace", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documents }),
+      })
+        .then((response) => {
+          if (!response.ok) throw new Error("Workspace save failed");
+          setLastSavedAt(new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }));
+        })
+        .catch(() => setPersistenceMode("local"));
+    }, 600);
+
+    return () => window.clearTimeout(timeout);
+  }, [documents, persistenceMode, workspaceLoaded]);
 
   async function onUpload(files: FileList | null) {
     if (!files?.length) return;
@@ -142,6 +220,9 @@ export default function Home() {
     setResults([]);
     setAnswer("");
     window.localStorage.removeItem(workspaceStorageKey);
+    if (persistenceMode === "database") {
+      void fetch("/api/workspace", { method: "DELETE" }).catch(() => setPersistenceMode("local"));
+    }
   }
 
   return (
@@ -200,6 +281,11 @@ export default function Home() {
               ["chat", Search, "RAG Chat"],
               ["documents", FileText, "Dokumente"],
               ["mindmap", Network, "Mindmap"],
+              ["requirements", Sparkles, "Requirements"],
+              ["qa", ClipboardCheck, "QA Matrix"],
+              ["risks", AlertTriangle, "Risiken"],
+              ["agents", Workflow, "AI Agenten"],
+              ["enterprise", ShieldCheck, "Enterprise"],
               ["architecture", Layers3, "Architektur"],
             ].map(([id, Icon, label]) => (
               <button
@@ -217,7 +303,11 @@ export default function Home() {
 
           <div className="mt-8 space-y-3 text-xs text-slate-400">
             <StatusRow icon={<Database size={14} />} label="Storage" value="Postgres + pgvector ready" />
-            <StatusRow icon={<HardDrive size={14} />} label="Lokal" value="Workspace Autosave aktiv" />
+            <StatusRow
+              icon={<HardDrive size={14} />}
+              label="Persistenz"
+              value={persistenceMode === "database" ? `DB Autosave${lastSavedAt ? ` ${lastSavedAt}` : ""}` : "Browser Autosave"}
+            />
             <StatusRow icon={<Lock size={14} />} label="RBAC" value="Owner/Admin/Editor/Viewer" />
             <StatusRow icon={<Moon size={14} />} label="Theme" value="Dark Mode native" />
             <StatusRow icon={<KeyRound size={14} />} label="API" value="REST/tRPC planned" />
@@ -245,7 +335,7 @@ export default function Home() {
             <Metric label="Dokumente" value={documents.length.toString()} icon={<FileText size={18} />} />
             <Metric label="Chunks" value={documents.reduce((sum, doc) => sum + doc.chunks.length, 0).toString()} icon={<GitBranch size={18} />} />
             <Metric label="Anforderungen" value={allRequirements.length.toString()} icon={<Sparkles size={18} />} />
-            <Metric label="Risiken" value={allRisks.length.toString()} icon={<ShieldCheck size={18} />} />
+            <Metric label="QA Coverage" value={`${qaCoverage}%`} icon={<CheckCircle2 size={18} />} />
           </div>
 
           {activeTab === "chat" && (
@@ -277,7 +367,7 @@ export default function Home() {
                     <div className="flex min-h-56 flex-col items-center justify-center text-center text-slate-400">
                       <Brain className="mb-4 text-cyan-200" size={34} />
                       <p className="max-w-md text-sm">
-                        Starte eine Suche. Der MVP erzeugt eine quellenbasierte Antwort aus lokalen Chunks und ist für OpenAI Streaming vorbereitet.
+                        Starte eine Suche. Der MVP erzeugt eine quellenbasierte Antwort aus lokalen Chunks und ist fÃ¼r OpenAI Streaming vorbereitet.
                       </p>
                     </div>
                   )}
@@ -374,14 +464,158 @@ export default function Home() {
             </div>
           )}
 
+          {activeTab === "requirements" && (
+            <div className="grid grid-cols-[1fr_390px] gap-5 px-7 pb-7 max-xl:grid-cols-1">
+              <section className="rounded-lg border border-white/10 bg-white/[0.035]">
+                <SectionHeader title="Requirements Engineering" subtitle="User Stories, Akzeptanzkriterien, Prioritaeten und Quellenbezug." />
+                <div className="divide-y divide-white/10">
+                  {allRequirements.map((requirement) => {
+                    const story = userStories.find((item) => item.requirementId === requirement.id);
+                    return <RequirementRow key={requirement.id} requirement={requirement} story={story} />;
+                  })}
+                  {allRequirements.length === 0 && <EmptyState text="Keine Anforderungen erkannt. Lade ein Lastenheft oder Jira-/Confluence-Export hoch." />}
+                </div>
+              </section>
+
+              <aside className="rounded-lg border border-white/10 bg-white/[0.035] p-5">
+                <h3 className="text-sm font-semibold">Gap- & Widerspruchs-Inbox</h3>
+                <div className="mt-4 space-y-3">
+                  {knowledgeGaps.map((gap) => (
+                    <InsightCard
+                      key={gap.id}
+                      title={gap.title}
+                      label={gap.severity}
+                      tone={gap.severity === "high" ? "red" : "amber"}
+                      body={`${gap.evidence} Empfehlung: ${gap.recommendation}`}
+                    />
+                  ))}
+                </div>
+              </aside>
+            </div>
+          )}
+
+          {activeTab === "qa" && (
+            <div className="grid grid-cols-[1fr_360px] gap-5 px-7 pb-7 max-xl:grid-cols-1">
+              <section className="rounded-lg border border-white/10 bg-white/[0.035]">
+                <SectionHeader title="QA Traceability Matrix" subtitle="Mapping von Anforderungen zu Testfaellen, Gherkin und Risiko." />
+                <div className="grid grid-cols-[1fr_.8fr_.8fr_.8fr] border-b border-white/10 px-4 py-3 text-xs uppercase text-slate-500 max-md:hidden">
+                  <span>Anforderung</span>
+                  <span>Testfall</span>
+                  <span>Coverage</span>
+                  <span>Risiko</span>
+                </div>
+                {testCases.map((testCase) => {
+                  const requirement = allRequirements.find((item) => item.id === testCase.requirementId);
+                  return <TraceabilityRow key={testCase.id} testCase={testCase} requirement={requirement} />;
+                })}
+                {testCases.length === 0 && <EmptyState text="Noch keine Testfaelle ableitbar." />}
+              </section>
+
+              <aside className="rounded-lg border border-white/10 bg-white/[0.035] p-5">
+                <h3 className="text-sm font-semibold">Regression Impact</h3>
+                <div className="mt-4 space-y-3">
+                  <MetricMini label="Anforderungen" value={allRequirements.length.toString()} />
+                  <MetricMini label="Testfaelle" value={testCases.length.toString()} />
+                  <MetricMini label="Teilweise/fehlend" value={testCases.filter((testCase) => testCase.coverage !== "covered").length.toString()} />
+                  <MetricMini label="Hohe Risiken" value={allRisks.filter((risk) => risk.severity === "high").length.toString()} />
+                </div>
+              </aside>
+            </div>
+          )}
+
+          {activeTab === "risks" && (
+            <div className="grid grid-cols-[1fr_360px] gap-5 px-7 pb-7 max-xl:grid-cols-1">
+              <section className="rounded-lg border border-white/10 bg-white/[0.035]">
+                <SectionHeader title="Risk Radar" subtitle="Risiken, offene Wissensluecken und moegliche Release-Blocker." />
+                <div className="grid grid-cols-3 gap-4 p-4 max-lg:grid-cols-1">
+                  {allRisks.map((risk) => (
+                    <InsightCard
+                      key={risk.id}
+                      title={risk.title}
+                      label={risk.severity}
+                      tone={risk.severity === "high" ? "red" : risk.severity === "medium" ? "amber" : "green"}
+                      body={risk.evidence}
+                    />
+                  ))}
+                </div>
+              </section>
+              <aside className="rounded-lg border border-white/10 bg-white/[0.035] p-5">
+                <h3 className="text-sm font-semibold">Scope-Erkennung</h3>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {allEntities.slice(0, 18).map((entity) => (
+                    <span key={entity.id} className="rounded-md bg-white/8 px-2.5 py-1.5 text-xs text-slate-300">
+                      {entity.name} Â· {entity.type}
+                    </span>
+                  ))}
+                </div>
+              </aside>
+            </div>
+          )}
+
+          {activeTab === "agents" && (
+            <div className="px-7 pb-7">
+              <section className="rounded-lg border border-white/10 bg-white/[0.035]">
+                <SectionHeader title="AI Agent Review Board" subtitle="Dokumentation, Architektur, QA, Security, Compliance und Release als spezialisierte Reviews." />
+                <div className="grid grid-cols-3 gap-4 p-4 max-xl:grid-cols-2 max-md:grid-cols-1">
+                  {agentInsights.map((insight) => (
+                    <InsightCard
+                      key={insight.id}
+                      title={insight.title}
+                      label={insight.priority}
+                      tone={insight.priority === "high" ? "red" : insight.priority === "medium" ? "amber" : "green"}
+                      body={insight.finding}
+                    />
+                  ))}
+                </div>
+              </section>
+            </div>
+          )}
+
+          {activeTab === "enterprise" && (
+            <div className="grid grid-cols-[1fr_360px] gap-5 px-7 pb-7 max-xl:grid-cols-1">
+              <section className="rounded-lg border border-white/10 bg-white/[0.035]">
+                <SectionHeader title="Enterprise Readiness" subtitle="Rollen, DSGVO, Audit, Datenklassifikation, lokale LLMs und Mandantentrennung." />
+                <div className="grid grid-cols-3 gap-4 p-4 max-xl:grid-cols-2 max-md:grid-cols-1">
+                  {enterpriseControls.map((control) => (
+                    <InsightCard
+                      key={control.id}
+                      title={control.area}
+                      label={control.status}
+                      tone={control.status === "ready" ? "green" : control.status === "gap" ? "red" : "amber"}
+                      body={control.description}
+                    />
+                  ))}
+                </div>
+              </section>
+              <aside className="rounded-lg border border-white/10 bg-white/[0.035] p-5">
+                <h3 className="text-sm font-semibold">Datenklassifikation</h3>
+                <div className="mt-4 space-y-2">
+                  {documents.map((document) => (
+                    <div key={document.id} className="rounded-md border border-white/10 bg-black/20 p-3">
+                      <p className="text-sm font-medium">{document.title}</p>
+                      <p className="mt-1 text-xs text-cyan-100">{document.classification}</p>
+                    </div>
+                  ))}
+                </div>
+              </aside>
+            </div>
+          )}
+
           {activeTab === "architecture" && (
             <div className="px-7 pb-7">
               <section className="rounded-lg border border-white/10 bg-white/[0.035] p-5">
-                <h3 className="mb-5 text-lg font-semibold">Zielarchitektur für Produktionsbetrieb</h3>
+                <h3 className="mb-5 text-lg font-semibold">Zielarchitektur fÃ¼r Produktionsbetrieb</h3>
+                <div className="mb-5 grid grid-cols-3 gap-3 max-xl:grid-cols-1">
+                  {architectureSummary.map((item) => (
+                    <div key={item} className="rounded-md border border-cyan-300/20 bg-cyan-300/8 p-3 text-sm text-cyan-50">
+                      {item}
+                    </div>
+                  ))}
+                </div>
                 <div className="grid grid-cols-3 gap-4 max-xl:grid-cols-1">
-                  <ArchitectureCard title="Ingestion Worker" items={["Parser für PDF/DOCX/MD/Code", "Semantisches Chunking", "Idempotente Jobs mit Retry"]} />
+                  <ArchitectureCard title="Ingestion Worker" items={["Parser fÃ¼r PDF/DOCX/MD/Code", "Semantisches Chunking", "Idempotente Jobs mit Retry"]} />
                   <ArchitectureCard title="Retrieval Engine" items={["pgvector + Full Text", "Graph Expansion", "Reranking und Context Packing"]} />
-                  <ArchitectureCard title="AI Services" items={["OpenAI Streaming", "Schema-basierte Extraktion", "Requirements, Risiken, Testfälle"]} />
+                  <ArchitectureCard title="AI Services" items={["OpenAI Streaming", "Schema-basierte Extraktion", "Requirements, Risiken, TestfÃ¤lle"]} />
                   <ArchitectureCard title="Security" items={["Organisationen und Workspaces", "RBAC + API Keys", "Audit Logs und Rate Limits"]} />
                   <ArchitectureCard title="Visualization" items={["Mindmaps", "Knowledge Graphs", "Requirement Maps"]} />
                   <ArchitectureCard title="Deployment" items={["Docker Compose", "PostgreSQL + pgvector", "Redis/Queue + S3 Storage"]} />
@@ -406,6 +640,115 @@ function Metric({ label, value, icon }: { label: string; value: string; icon: Re
       <p className="mt-1 text-sm text-slate-400">{label}</p>
     </div>
   );
+}
+
+function SectionHeader({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div className="border-b border-white/10 px-5 py-4">
+      <h3 className="text-base font-semibold">{title}</h3>
+      <p className="mt-1 text-sm text-slate-400">{subtitle}</p>
+    </div>
+  );
+}
+
+function RequirementRow({ requirement, story }: { requirement: Requirement; story?: UserStory }) {
+  return (
+    <article className="px-5 py-4">
+      <div className="flex items-start justify-between gap-4 max-md:block">
+        <div>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <h4 className="text-sm font-semibold">{requirement.title}</h4>
+            <Badge tone={requirement.priority === "must" ? "red" : requirement.priority === "should" ? "amber" : "green"}>
+              {requirement.priority}
+            </Badge>
+            <Badge tone="cyan">{Math.round(requirement.confidence * 100)}% sicher</Badge>
+          </div>
+          <p className="text-sm leading-6 text-slate-300">{requirement.statement}</p>
+          {story && (
+            <div className="mt-4 rounded-md border border-cyan-300/15 bg-cyan-300/8 p-3">
+              <p className="text-sm font-medium text-cyan-50">{story.story}</p>
+              <ul className="mt-3 space-y-1.5 text-xs leading-5 text-slate-300">
+                {story.acceptanceCriteria.map((criterion) => (
+                  <li key={criterion}>- {criterion}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function TraceabilityRow({ testCase, requirement }: { testCase: TestCase; requirement?: Requirement }) {
+  return (
+    <article className="grid grid-cols-[1fr_.8fr_.8fr_.8fr] gap-4 border-b border-white/10 px-4 py-4 last:border-b-0 max-md:block">
+      <div>
+        <p className="text-sm font-semibold">{requirement?.title ?? "Unbekannte Anforderung"}</p>
+        <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">{requirement?.statement}</p>
+      </div>
+      <details className="text-sm text-slate-300 max-md:mt-3">
+        <summary className="cursor-pointer font-medium">{testCase.title}</summary>
+        <pre className="mt-3 overflow-auto rounded-md bg-black/35 p-3 text-xs leading-5 text-slate-300">{testCase.gherkin}</pre>
+      </details>
+      <div className="max-md:mt-3">
+        <Badge tone={testCase.coverage === "covered" ? "green" : testCase.coverage === "partial" ? "amber" : "red"}>
+          {testCase.coverage}
+        </Badge>
+      </div>
+      <div className="max-md:mt-3">
+        <Badge tone={testCase.riskLevel === "high" ? "red" : testCase.riskLevel === "medium" ? "amber" : "green"}>
+          {testCase.riskLevel}
+        </Badge>
+      </div>
+    </article>
+  );
+}
+
+function InsightCard({
+  title,
+  label,
+  body,
+  tone,
+}: {
+  title: string;
+  label: string;
+  body: string;
+  tone: "red" | "amber" | "green" | "cyan";
+}) {
+  return (
+    <article className="rounded-lg border border-white/10 bg-black/20 p-4">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <h4 className="text-sm font-semibold">{title}</h4>
+        <Badge tone={tone}>{label}</Badge>
+      </div>
+      <p className="text-sm leading-6 text-slate-400">{body}</p>
+    </article>
+  );
+}
+
+function MetricMini({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between rounded-md border border-white/10 bg-black/20 px-3 py-3">
+      <span className="text-sm text-slate-400">{label}</span>
+      <span className="text-lg font-semibold text-cyan-100">{value}</span>
+    </div>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return <p className="px-5 py-10 text-center text-sm text-slate-400">{text}</p>;
+}
+
+function Badge({ children, tone }: { children: React.ReactNode; tone: "red" | "amber" | "green" | "cyan" }) {
+  const classes = {
+    red: "bg-red-300/15 text-red-100",
+    amber: "bg-amber-300/15 text-amber-100",
+    green: "bg-emerald-300/15 text-emerald-100",
+    cyan: "bg-cyan-300/15 text-cyan-100",
+  };
+
+  return <span className={`rounded px-2 py-1 text-xs font-medium ${classes[tone]}`}>{children}</span>;
 }
 
 function StatusRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
@@ -447,3 +790,5 @@ function ArchitectureCard({ title, items }: { title: string; items: string[] }) 
     </article>
   );
 }
+
+

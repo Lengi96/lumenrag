@@ -1,90 +1,71 @@
+import { analyzeDocument } from "./knowledge";
 import type { KnowledgeDocument } from "./types";
 
-export const sampleDocuments: KnowledgeDocument[] = [
+const rawSampleDocuments = [
   {
     id: "doc-lastenheft",
-    title: "Lastenheft Kundenportal",
+    title: "Lastenheft Kundenportal.md",
     type: "text/markdown",
     size: 18420,
-    createdAt: "2026-05-13T08:30:00.000Z",
-    status: "indexed",
-    classification: "Lastenheft",
-    tags: ["portal", "anforderungen", "rollen", "audit", "export"],
-    summary:
-      "Das Dokument beschreibt ein Kundenportal mit Self-Service, Rollenmodell, Dokumentverwaltung, Suchfunktionen und revisionssicherem Export.",
-    chunks: [],
-    entities: [
-      { id: "e1", documentId: "doc-lastenheft", name: "Kundenportal", type: "system", weight: 10 },
-      { id: "e2", documentId: "doc-lastenheft", name: "Sachbearbeiter", type: "role", weight: 7 },
-      { id: "e3", documentId: "doc-lastenheft", name: "Audit Log", type: "artifact", weight: 6 },
-    ],
-    requirements: [
-      {
-        id: "r1",
-        documentId: "doc-lastenheft",
-        title: "Dokumente versionieren",
-        statement: "Das System muss hochgeladene Dokumente versionieren und Änderungen nachvollziehbar speichern.",
-        priority: "must",
-        confidence: 0.91,
-      },
-      {
-        id: "r2",
-        documentId: "doc-lastenheft",
-        title: "Export bereitstellen",
-        statement: "Benutzer sollen Suchergebnisse inklusive Quellen als PDF und Markdown exportieren können.",
-        priority: "should",
-        confidence: 0.86,
-      },
-    ],
-    risks: [
-      {
-        id: "risk1",
-        documentId: "doc-lastenheft",
-        title: "Unklare Mandantentrennung",
-        evidence: "Rollen werden erwähnt, aber die Isolation zwischen Organisationen ist nicht vollständig spezifiziert.",
-        severity: "high",
-      },
-    ],
-    content:
-      "Das Kundenportal muss Dokumente versionieren, Rollen und Rechte abbilden und alle relevanten Aktivitäten im Audit Log speichern. Benutzer sollen Suchergebnisse inklusive Quellen exportieren können. Risiken bestehen bei unklarer Mandantentrennung.",
+    content: `
+Das Kundenportal muss Dokumente versionieren, Rollen und Rechte abbilden und alle relevanten Aktivitaeten im Audit Log speichern.
+Benutzer sollen Suchergebnisse inklusive Quellen als PDF und Markdown exportieren koennen.
+Sachbearbeiter muessen Dokumente nach Kunde, Status, Dokumenttyp und Erstellungsdatum filtern koennen.
+Das System muss Mandantentrennung zwischen Organisationen sicherstellen.
+Risiko: Die Isolation zwischen Organisationen ist kritisch und muss in der Architektur eindeutig spezifiziert werden.
+Akzeptanzkriterium: Ein Benutzer darf niemals Dokumente eines anderen Mandanten sehen.
+Testfall: Wenn ein Benutzer ohne Berechtigung ein Dokument oeffnet, muss die Plattform den Zugriff verweigern.
+`,
   },
   {
     id: "doc-architektur",
-    title: "Architekturkonzept RAG Plattform",
+    title: "Architekturkonzept RAG Plattform.md",
     type: "text/markdown",
     size: 22110,
-    createdAt: "2026-05-13T09:15:00.000Z",
-    status: "indexed",
-    classification: "Architekturdokument",
-    tags: ["rag", "pgvector", "worker", "openai", "streaming"],
-    summary:
-      "Das Architekturkonzept definiert eine Next.js-Plattform mit PostgreSQL, pgvector, Worker-Pipeline, OpenAI-Integration und Streaming Chat.",
-    chunks: [],
-    entities: [
-      { id: "e4", documentId: "doc-architektur", name: "pgvector", type: "artifact", weight: 9 },
-      { id: "e5", documentId: "doc-architektur", name: "Ingestion Worker", type: "process", weight: 8 },
-      { id: "e6", documentId: "doc-architektur", name: "RAG Pipeline", type: "process", weight: 10 },
-    ],
-    requirements: [
-      {
-        id: "r3",
-        documentId: "doc-architektur",
-        title: "Streaming Antworten",
-        statement: "Der Chat muss Antworten tokenweise streamen und Quellen bereits während der Antwort anzeigen.",
-        priority: "must",
-        confidence: 0.89,
-      },
-    ],
-    risks: [
-      {
-        id: "risk2",
-        documentId: "doc-architektur",
-        title: "Embedding-Kosten",
-        evidence: "Große Dokumentmengen benötigen Batch-Verarbeitung, Caching und Kostenkontrolle.",
-        severity: "medium",
-      },
-    ],
-    content:
-      "Die Plattform nutzt Next.js, PostgreSQL, pgvector und OpenAI. Eine Worker-Pipeline verarbeitet Uploads, erstellt Chunks, Embeddings, Entities, Requirements und Risiken. Der Chat streamt Antworten mit Quellen.",
+    content: `
+Die Plattform nutzt Next.js, PostgreSQL, pgvector und OpenAI.
+Eine Ingestion Worker Pipeline verarbeitet Uploads, erstellt Chunks, Embeddings, Entities, Requirements und Risiken.
+Der Chat muss Antworten tokenweise streamen und Quellen bereits waehrend der Antwort anzeigen.
+Die API muss Dokumente, Suchanfragen, Graph-Abfragen und Exporte getrennt bereitstellen.
+Risiko: Grosse Dokumentmengen benoetigen Batch-Verarbeitung, Caching und Kostenkontrolle fuer Embeddings.
+Performance: Retrieval muss Full Text, Vektor-Suche und Graph Expansion kombinieren.
+`,
+  },
+  {
+    id: "doc-qa",
+    title: "QA Teststrategie.md",
+    type: "text/markdown",
+    size: 12600,
+    content: `
+Alle Muss-Anforderungen sollen mindestens einen funktionalen Testfall besitzen.
+Regressionstests muessen Requirements, Bugs und Code-Aenderungen miteinander verknuepfen.
+Gherkin-Szenarien sollen aus Akzeptanzkriterien automatisch vorgeschlagen und durch QA freigegeben werden.
+Testabdeckung muss pro Release sichtbar sein.
+Risiko: Anforderungen ohne Testfall fuehren zu unklarer Release Readiness.
+Bug Reports muessen auf betroffene Anforderungen und Quellen referenzieren.
+`,
+  },
+  {
+    id: "doc-compliance",
+    title: "Enterprise Governance.md",
+    type: "text/markdown",
+    size: 9900,
+    content: `
+Die Plattform muss DSGVO-konform betrieben werden und sensible Daten erkennen.
+Owner, Admin, Editor und Viewer muessen unterschiedliche Rechte pro Workspace erhalten.
+Audit Logs sollen Uploads, Exporte, Suchanfragen und AI-Antworten nachvollziehbar speichern.
+Lokale LLMs sollen fuer vertrauliche Workspaces moeglich sein.
+Risiko: Ohne Datenklassifikation koennen sensible Informationen versehentlich an externe Provider gesendet werden.
+`,
   },
 ];
+
+export const sampleDocuments: KnowledgeDocument[] = rawSampleDocuments.map((document) =>
+  analyzeDocument({
+    id: document.id,
+    title: document.title,
+    type: document.type,
+    size: document.size,
+    content: document.content.trim(),
+  }),
+);

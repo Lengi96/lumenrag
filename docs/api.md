@@ -87,6 +87,9 @@ MVP routes:
 ```http
 POST /api/documents
 POST /api/search
+GET /api/workspace
+PUT /api/workspace
+DELETE /api/workspace
 POST /api/graph
 POST /api/export
 ```

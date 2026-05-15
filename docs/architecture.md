@@ -78,6 +78,8 @@ The MVP now exposes backend routes that mirror the planned production services:
 
 These routes are stateless in the MVP. In production they should write through the Prisma repositories and enqueue ingestion jobs.
 
+`GET /api/workspace`, `PUT /api/workspace` and `DELETE /api/workspace` now provide the first server-side persistence boundary. They use Prisma when `DATABASE_URL` is configured and fall back to browser-local storage semantics when the database is unavailable.
+
 ## Parser Support
 
 The upload route now supports text-like files, PDF and DOCX. PDF extraction uses `pdf-parse`; DOCX extraction uses `mammoth`. Parser metadata is attached to returned document objects so the UI and future persistence layer can inspect how a document was ingested.
