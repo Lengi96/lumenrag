@@ -44,6 +44,12 @@ Open `http://localhost:3000`.
 
 This starts the Next.js app, PostgreSQL with `pgvector`, Redis and MinIO. The compose stack also runs `prisma migrate deploy` before the app starts, so the database schema is created automatically.
 
+To load the demo workspace into the running Docker database:
+
+```bash
+docker compose run --rm migrate npm run seed:demo
+```
+
 OpenAI is optional. Without `OPENAI_API_KEY`, LumenRAG uses the local deterministic answer generator and no chat prompts are sent to OpenAI. To enable OpenAI-backed answers, create `.env` from `.env.example` and set `OPENAI_API_KEY` before starting the stack.
 
 ## Optional PostgreSQL Persistence
@@ -59,6 +65,12 @@ npm run dev
 ```
 
 The UI status panel shows `DB Autosave` when `/api/workspace` can read and write through Prisma. If the database is unavailable, the app automatically falls back to `Browser Autosave`.
+
+To seed the database with a small demo workspace:
+
+```bash
+npm run seed:demo
+```
 
 ## Optional OpenAI Mode
 

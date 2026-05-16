@@ -9,7 +9,8 @@
     "lint": "eslint",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "seed:demo": "prisma generate && node scripts/seed-demo.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.18.0",
