@@ -32,7 +32,7 @@ Goal: A developer or company evaluator can clone the repo and run a complete loc
 - `[x]` Add seed/demo workspace command
 - `[x]` Add screenshots or GIFs to README
 - `[x]` Add GitHub Actions CI for lint, build and Prisma validation
-- `[ ]` Add license file
+- `[x]` Add license file
 - `[ ]` Add `CONTRIBUTING.md`
 - `[ ]` Add issue templates for bug, feature and roadmap task
 

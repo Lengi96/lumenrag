@@ -103,6 +103,10 @@ See:
 - `docs/api.md`
 - `prisma/schema.prisma`
 
+## License
+
+LumenRAG is released under the [MIT License](LICENSE).
+
 ## Next Implementation Steps
 
 1. Move ingestion from API request handling to worker jobs.
