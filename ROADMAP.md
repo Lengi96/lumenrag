@@ -33,8 +33,8 @@ Goal: A developer or company evaluator can clone the repo and run a complete loc
 - `[x]` Add screenshots or GIFs to README
 - `[x]` Add GitHub Actions CI for lint, build and Prisma validation
 - `[x]` Add license file
-- `[ ]` Add `CONTRIBUTING.md`
-- `[ ]` Add issue templates for bug, feature and roadmap task
+- `[x]` Add `CONTRIBUTING.md`
+- `[x]` Add issue templates for bug, feature and roadmap task
 
 Acceptance criteria:
 
