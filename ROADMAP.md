@@ -30,7 +30,7 @@ Goal: A developer or company evaluator can clone the repo and run a complete loc
 - `[x]` Extend `docker-compose.yml` to run app + Postgres + Redis + MinIO together
 - `[x]` Add `docker compose up` quickstart path that works from a fresh clone
 - `[x]` Add seed/demo workspace command
-- `[ ]` Add screenshots or GIFs to README
+- `[x]` Add screenshots or GIFs to README
 - `[ ]` Add GitHub Actions CI for lint, build and Prisma validation
 - `[ ]` Add license file
 - `[ ]` Add `CONTRIBUTING.md`

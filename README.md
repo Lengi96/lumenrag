@@ -4,6 +4,10 @@ LumenRAG is a modern open-source RAG knowledge workspace for technical documents
 
 It is inspired by graph-based RAG architectures, but implemented as a TypeScript-first product with a clean path to PostgreSQL, pgvector, workers and OpenAI streaming.
 
+## Preview
+
+![LumenRAG mindmap view](public/screenshots/lumenrag-mindmap.png)
+
 ## Current MVP
 
 - Next.js + TypeScript + Tailwind
