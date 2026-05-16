@@ -16,6 +16,7 @@ It is inspired by graph-based RAG architectures, but implemented as a TypeScript
 - Keyword/semantic-style search
 - Source-grounded answer generation
 - Streaming chat UI with citations, stop control, source-only mode and DB-backed conversation history
+- Document detail view with source chunks, citation links, match highlighting and Markdown/code/table preview
 - Document classification
 - Requirement extraction
 - Risk extraction

@@ -159,6 +159,9 @@ function toSearchResult(row: RawChunkMatch, matchReason: string): SearchResult {
     content: row.content,
     tokenCount: row.tokenCount,
     keywords: extractKeywords(row.metadata),
+    metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+      ? (row.metadata as Record<string, unknown>)
+      : undefined,
   };
 
   return {

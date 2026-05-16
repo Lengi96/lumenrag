@@ -86,14 +86,14 @@ Acceptance criteria:
 
 Goal: Users can verify every answer against the original document context.
 
-- `[ ]` Add document detail view
-- `[ ]` Add chunk list per document
-- `[ ]` Highlight search matches in chunks
-- `[ ]` Link citations from chat to source chunks
-- `[ ]` Preserve PDF page numbers where parser exposes them
-- `[ ]` Add source drawer next to chat
-- `[ ]` Add Markdown and code rendering in document preview
-- `[ ]` Add table rendering for Markdown/CSV-like content
+- `[x]` Add document detail view
+- `[x]` Add chunk list per document
+- `[x]` Highlight search matches in chunks
+- `[x]` Link citations from chat to source chunks
+- `[x]` Preserve PDF page numbers where parser exposes them
+- `[x]` Add source drawer next to chat
+- `[x]` Add Markdown and code rendering in document preview
+- `[x]` Add table rendering for Markdown/CSV-like content
 
 Acceptance criteria:
 

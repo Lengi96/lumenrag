@@ -37,7 +37,7 @@ import {
   findKnowledgeGaps,
 } from "@/lib/insights";
 import { sampleDocuments } from "@/lib/sample-data";
-import type { KnowledgeDocument, MindmapNode, Requirement, SearchResult, TestCase, UserStory } from "@/lib/types";
+import type { KnowledgeChunk, KnowledgeDocument, MindmapNode, Requirement, SearchResult, TestCase, UserStory } from "@/lib/types";
 
 const workspaceStorageKey = "lumenrag.workspace.v1";
 type PersistenceMode = "loading" | "database" | "local";
@@ -74,6 +74,8 @@ export default function Home() {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [onlySources, setOnlySources] = useState(true);
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
+  const [selectedChunkId, setSelectedChunkId] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<MindmapNode | null>(null);
   const [activeTab, setActiveTab] = useState<
     "chat" | "documents" | "mindmap" | "requirements" | "qa" | "risks" | "agents" | "enterprise" | "architecture"
@@ -95,6 +97,13 @@ export default function Home() {
   const agentInsights = useMemo(() => buildAgentInsights(documents), [documents]);
   const enterpriseControls = useMemo(() => buildEnterpriseControls(documents), [documents]);
   const architectureSummary = useMemo(() => buildArchitectureSummary(documents), [documents]);
+  const selectedDocument = documents.find((document) => document.id === selectedDocumentId) ?? documents[0] ?? null;
+  const selectedChunk = selectedDocument?.chunks.find((chunk) => chunk.id === selectedChunkId) ?? null;
+  const activeHighlights = useMemo(() => {
+    const chunkHighlights = selectedChunk?.keywords ?? [];
+    const resultHighlights = results.flatMap((result) => result.highlights);
+    return Array.from(new Set([...chunkHighlights, ...resultHighlights])).slice(0, 12);
+  }, [results, selectedChunk]);
   const qaCoverage = allRequirements.length
     ? Math.round((testCases.filter((testCase) => testCase.coverage !== "missing").length / allRequirements.length) * 100)
     : 0;
@@ -216,6 +225,8 @@ export default function Home() {
         skipNextDatabaseSaveRef.current = true;
       }
       setDocuments((current) => [...payload.documents, ...current]);
+      setSelectedDocumentId(payload.documents[0]?.id ?? null);
+      setSelectedChunkId(payload.documents[0]?.chunks[0]?.id ?? null);
       setActiveTab("mindmap");
     } finally {
       setIsBusy(false);
@@ -332,6 +343,12 @@ export default function Home() {
     }
   }
 
+  function openSource(documentId: string, chunkId?: string) {
+    setSelectedDocumentId(documentId);
+    setSelectedChunkId(chunkId ?? null);
+    setActiveTab("documents");
+  }
+
   async function exportWorkspace() {
     const response = await fetch("/api/export", {
       method: "POST",
@@ -359,6 +376,8 @@ export default function Home() {
 
   function resetWorkspace() {
     setDocuments(sampleDocuments);
+    setSelectedDocumentId(sampleDocuments[0]?.id ?? null);
+    setSelectedChunkId(sampleDocuments[0]?.chunks[0]?.id ?? null);
     setResults([]);
     setAnswer("");
     setCitations([]);
@@ -610,6 +629,12 @@ export default function Home() {
                         </div>
                         <p className="line-clamp-4 text-xs leading-5 text-slate-400">{result.chunk.content}</p>
                         {result.matchReason && <p className="mt-2 text-[11px] leading-4 text-slate-500">{result.matchReason}</p>}
+                        <button
+                          onClick={() => openSource(result.chunk.documentId, result.chunk.id)}
+                          className="mt-3 rounded border border-cyan-300/25 px-2 py-1 text-xs text-cyan-100 transition hover:bg-cyan-300/10"
+                        >
+                          Quelle oeffnen
+                        </button>
                         <div className="mt-3 flex flex-wrap gap-1.5">
                           {result.highlights.map((highlight) => (
                             <span key={highlight} className="rounded bg-cyan-300/15 px-2 py-1 text-xs text-cyan-100">
@@ -628,6 +653,12 @@ export default function Home() {
                         </div>
                         <p className="line-clamp-4 text-xs leading-5 text-slate-400">{citation.quote}</p>
                         {citation.matchReason && <p className="mt-2 text-[11px] leading-4 text-slate-500">{citation.matchReason}</p>}
+                        <button
+                          onClick={() => openSource(citation.documentId, citation.chunkId)}
+                          className="mt-3 rounded border border-cyan-300/25 px-2 py-1 text-xs text-cyan-100 transition hover:bg-cyan-300/10"
+                        >
+                          Quelle oeffnen
+                        </button>
                       </article>
                     ))
                   )}
@@ -637,40 +668,99 @@ export default function Home() {
           )}
 
           {activeTab === "documents" && (
-            <div className="grid grid-cols-[1fr_390px] gap-5 px-7 pb-7 max-xl:grid-cols-1">
+            <div className="grid grid-cols-[320px_360px_1fr] gap-5 px-7 pb-7 max-2xl:grid-cols-[300px_1fr] max-xl:grid-cols-1">
               <section className="rounded-lg border border-white/10 bg-white/[0.035]">
-                <div className="grid grid-cols-[1.4fr_.8fr_.8fr_.5fr] border-b border-white/10 px-4 py-3 text-xs uppercase text-slate-500 max-md:hidden">
-                  <span>Name</span>
-                  <span>Klasse</span>
-                  <span>Tags</span>
-                  <span>Chunks</span>
-                </div>
-                {documents.map((doc) => (
-                  <article key={doc.id} className="grid grid-cols-[1.4fr_.8fr_.8fr_.5fr] gap-4 border-b border-white/10 px-4 py-4 last:border-b-0 max-md:block">
-                    <div>
+                <SectionHeader title="Dokumente" subtitle="Detailansicht und Quellenprüfung." />
+                <div className="max-h-[720px] overflow-auto">
+                  {documents.map((doc) => (
+                    <button
+                      key={doc.id}
+                      onClick={() => {
+                        setSelectedDocumentId(doc.id);
+                        setSelectedChunkId(doc.chunks[0]?.id ?? null);
+                      }}
+                      className={`block w-full border-b border-white/10 px-4 py-4 text-left transition last:border-b-0 ${
+                        selectedDocument?.id === doc.id ? "bg-cyan-300/10" : "hover:bg-white/8"
+                      }`}
+                    >
                       <h3 className="text-sm font-semibold">{doc.title}</h3>
                       <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">{doc.summary}</p>
-                    </div>
-                    <p className="text-sm text-slate-300 max-md:mt-3">{doc.classification}</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {doc.tags.slice(0, 4).map((tag) => (
-                        <span key={tag} className="rounded bg-white/8 px-2 py-1 text-xs text-slate-300">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                    <p className="text-sm text-slate-300">{doc.chunks.length}</p>
-                  </article>
-                ))}
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        <Badge tone="cyan">{doc.classification}</Badge>
+                        <Badge tone="green">{doc.chunks.length} Chunks</Badge>
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </section>
 
-              <aside className="rounded-lg border border-white/10 bg-white/[0.035] p-5">
-                <h3 className="text-sm font-semibold">Automatische Extraktion</h3>
-                <div className="mt-4 space-y-5">
-                  <ExtractionList title="Anforderungen" items={allRequirements.map((item) => item.title)} color="bg-amber-300/15 text-amber-100" />
-                  <ExtractionList title="Risiken" items={allRisks.map((item) => item.title)} color="bg-red-300/15 text-red-100" />
+              <aside className="rounded-lg border border-white/10 bg-white/[0.035]">
+                <SectionHeader title="Source Chunks" subtitle={selectedDocument?.title ?? "Kein Dokument"} />
+                <div className="max-h-[720px] overflow-auto p-3">
+                  {selectedDocument?.chunks.map((chunk) => (
+                    <button
+                      key={chunk.id}
+                      onClick={() => setSelectedChunkId(chunk.id)}
+                      className={`mb-3 block w-full rounded-md border p-3 text-left transition ${
+                        selectedChunkId === chunk.id ? "border-cyan-300/35 bg-cyan-300/10" : "border-white/10 bg-black/20 hover:bg-white/8"
+                      }`}
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <span className="text-xs font-medium text-slate-300">Chunk {chunk.index + 1}</span>
+                        <span className="text-[11px] text-slate-500">{chunk.tokenCount} Tokens</span>
+                      </div>
+                      <p className="line-clamp-4 text-xs leading-5 text-slate-400">
+                        <HighlightedText text={chunk.content} terms={activeHighlights} />
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {chunk.keywords.slice(0, 4).map((keyword) => (
+                          <span key={keyword} className="rounded bg-cyan-300/10 px-1.5 py-0.5 text-[11px] text-cyan-100">
+                            {keyword}
+                          </span>
+                        ))}
+                      </div>
+                    </button>
+                  ))}
                 </div>
               </aside>
+
+              <section className="rounded-lg border border-white/10 bg-white/[0.035] max-2xl:col-span-2 max-xl:col-span-1">
+                <SectionHeader
+                  title={selectedDocument?.title ?? "Dokumentvorschau"}
+                  subtitle={
+                    selectedChunk
+                      ? `Chunk ${selectedChunk.index + 1}${typeof selectedChunk.metadata?.pageNumber === "number" ? ` · Seite ${selectedChunk.metadata.pageNumber}` : ""}`
+                      : "Waehle einen Chunk aus."
+                  }
+                />
+                <div className="grid grid-cols-[1fr_280px] gap-4 p-5 max-xl:grid-cols-1">
+                  <article className="min-h-[420px] rounded-lg border border-white/10 bg-[#0b1514] p-5">
+                    {selectedChunk ? (
+                      <div className="prose prose-invert max-w-none prose-headings:text-slate-100 prose-a:text-cyan-200 prose-code:text-cyan-100 prose-pre:bg-black/35 prose-table:text-sm">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {formatPreviewContent(selectedChunk, selectedDocument?.type ?? "")}
+                        </ReactMarkdown>
+                      </div>
+                    ) : (
+                      <EmptyState text="Kein Chunk ausgewaehlt." />
+                    )}
+                  </article>
+                  <aside className="space-y-4">
+                    <InsightCard
+                      title="Quellenbezug"
+                      label={selectedChunk ? "bereit" : "leer"}
+                      tone={selectedChunk ? "green" : "amber"}
+                      body={
+                        selectedChunk
+                          ? "Diese Vorschau zeigt den exakten Chunk, der von Citations oder Suchergebnissen geoeffnet werden kann."
+                          : "Waehle ein Dokument oder eine Citation aus."
+                      }
+                    />
+                    <ExtractionList title="Anforderungen" items={(selectedDocument?.requirements ?? []).map((item) => item.title)} color="bg-amber-300/15 text-amber-100" />
+                    <ExtractionList title="Risiken" items={(selectedDocument?.risks ?? []).map((item) => item.title)} color="bg-red-300/15 text-red-100" />
+                  </aside>
+                </div>
+              </section>
             </div>
           )}
 
@@ -972,6 +1062,39 @@ function MetricMini({ label, value }: { label: string; value: string }) {
 
 function EmptyState({ text }: { text: string }) {
   return <p className="px-5 py-10 text-center text-sm text-slate-400">{text}</p>;
+}
+
+function HighlightedText({ text, terms }: { text: string; terms: string[] }) {
+  const cleanedTerms = terms.filter((term) => term.length > 2).slice(0, 8);
+  if (cleanedTerms.length === 0) return <>{text}</>;
+
+  const pattern = new RegExp(`(${cleanedTerms.map(escapeRegExp).join("|")})`, "gi");
+  return (
+    <>
+      {text.split(pattern).map((part, index) =>
+        cleanedTerms.some((term) => part.toLowerCase() === term.toLowerCase()) ? (
+          <mark key={`${part}-${index}`} className="rounded bg-amber-300/25 px-0.5 text-amber-100">
+            {part}
+          </mark>
+        ) : (
+          <span key={`${part}-${index}`}>{part}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+function formatPreviewContent(chunk: KnowledgeChunk, documentType: string) {
+  const content = chunk.content.trim();
+  if (/markdown|md|csv|json|yaml|xml/i.test(documentType)) return content;
+  if (/\b(function|const|class|import|export|SELECT|CREATE|model)\b/.test(content)) {
+    return `\`\`\`\n${content}\n\`\`\``;
+  }
+  return content;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function Badge({ children, tone }: { children: React.ReactNode; tone: "red" | "amber" | "green" | "cyan" }) {

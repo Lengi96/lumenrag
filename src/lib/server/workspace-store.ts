@@ -72,6 +72,9 @@ export async function loadWorkspaceDocuments() {
         content: chunk.content,
         tokenCount: chunk.tokenCount,
         keywords: extractStringArray(chunk.metadata, "keywords"),
+        metadata: chunk.metadata && typeof chunk.metadata === "object" && !Array.isArray(chunk.metadata)
+          ? (chunk.metadata as Record<string, unknown>)
+          : undefined,
       })),
       entities: document.entities.map((entity): Entity => ({
         id: entity.id,

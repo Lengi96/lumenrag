@@ -26,6 +26,7 @@ export type KnowledgeChunk = {
   content: string;
   tokenCount: number;
   keywords: string[];
+  metadata?: Record<string, unknown>;
 };
 
 export type Requirement = {
