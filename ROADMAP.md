@@ -31,7 +31,7 @@ Goal: A developer or company evaluator can clone the repo and run a complete loc
 - `[x]` Add `docker compose up` quickstart path that works from a fresh clone
 - `[x]` Add seed/demo workspace command
 - `[x]` Add screenshots or GIFs to README
-- `[ ]` Add GitHub Actions CI for lint, build and Prisma validation
+- `[x]` Add GitHub Actions CI for lint, build and Prisma validation
 - `[ ]` Add license file
 - `[ ]` Add `CONTRIBUTING.md`
 - `[ ]` Add issue templates for bug, feature and roadmap task
