@@ -8,13 +8,15 @@ import type {
   TestCase,
   UserStory,
 } from "./types";
+import { structuredKnowledgeGaps, structuredTestCases, structuredUserStories } from "./ai/structured-extraction";
 
 const securityTerms = ["security", "datenschutz", "privacy", "auth", "rolle", "recht", "audit", "mandant"];
 const qaTerms = ["test", "gherkin", "akzeptanz", "abnahme", "regression", "bug", "fehler"];
 const architectureTerms = ["api", "service", "worker", "datenbank", "postgres", "pgvector", "pipeline", "stream"];
 
-export function buildUserStories(requirements: Requirement[]): UserStory[] {
-  return requirements.map((requirement) => {
+export function buildUserStories(requirements: Requirement[], documents: KnowledgeDocument[] = []): UserStory[] {
+  const structured = documents.flatMap(structuredUserStories);
+  const generated: UserStory[] = requirements.map((requirement) => {
     const actor = inferActor(requirement.statement);
     const goal = cleanupStatement(requirement.statement);
     return {
@@ -29,10 +31,12 @@ export function buildUserStories(requirements: Requirement[]): UserStory[] {
       ],
     };
   });
+  return mergeById([...structured, ...generated]);
 }
 
-export function buildTestCases(requirements: Requirement[], risks: Risk[]): TestCase[] {
-  return requirements.map((requirement, index) => {
+export function buildTestCases(requirements: Requirement[], risks: Risk[], documents: KnowledgeDocument[] = []): TestCase[] {
+  const structured = documents.flatMap(structuredTestCases);
+  const generated: TestCase[] = requirements.map((requirement, index) => {
     const relatedRisk = risks.find((risk) => risk.documentId === requirement.documentId);
     const riskLevel = relatedRisk?.severity ?? (requirement.priority === "must" ? "medium" : "low");
     const coverage = requirement.confidence > 0.88 ? "covered" : requirement.confidence > 0.78 ? "partial" : "missing";
@@ -52,13 +56,14 @@ export function buildTestCases(requirements: Requirement[], risks: Risk[]): Test
       ].join("\n"),
     };
   });
+  return mergeById([...structured, ...generated]);
 }
 
 export function findKnowledgeGaps(documents: KnowledgeDocument[]): KnowledgeGap[] {
   const text = documents.map((document) => `${document.title} ${document.content}`).join("\n").toLowerCase();
   const requirements = documents.flatMap((document) => document.requirements);
   const risks = documents.flatMap((document) => document.risks);
-  const gaps: KnowledgeGap[] = [];
+  const gaps: KnowledgeGap[] = documents.flatMap(structuredKnowledgeGaps);
 
   if (requirements.length === 0) {
     gaps.push({
@@ -240,4 +245,13 @@ function containsAny(text: string, terms: string[]): boolean {
 
 function unique(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean)));
+}
+
+function mergeById<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
 }

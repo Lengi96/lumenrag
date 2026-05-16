@@ -18,6 +18,7 @@ It is inspired by graph-based RAG architectures, but implemented as a TypeScript
 - Streaming chat UI with citations, stop control, source-only mode and DB-backed conversation history
 - Document detail view with source chunks, citation links, match highlighting and Markdown/code/table preview
 - Worker-based ingestion queue with progress, retry and cancellation when PostgreSQL and Redis are enabled
+- Optional LangChain structured extraction with Zod schemas for requirements, risks, entities, relations, user stories, test cases and gaps
 - Document classification
 - Requirement extraction
 - Risk extraction
@@ -94,6 +95,17 @@ When the key is present, `/api/chat` uses OpenAI for grounded answer generation.
 When PostgreSQL is enabled, uploaded documents and chunks are persisted through Prisma. If `OPENAI_API_KEY` is configured, LumenRAG stores `text-embedding-3-small` embeddings in pgvector and `/api/search` uses hybrid vector plus full-text retrieval. Without an embedding provider, search falls back to PostgreSQL full-text and then to local heuristic retrieval.
 
 The chat UI uses `/api/chat/stream` for live token streaming. Citations are shown during generation, responses can be stopped, and conversations are persisted when PostgreSQL is enabled.
+
+## Optional LangChain Extraction
+
+LumenRAG keeps heuristic extraction as the default. To use LangChain for schema-based extraction in the ingestion worker, set:
+
+```bash
+EXTRACTION_PROVIDER="langchain"
+OPENAI_API_KEY="..."
+```
+
+The LangChain provider uses Zod structured output and the configured OpenAI-compatible endpoint. For local OpenAI-compatible runtimes, set `OPENAI_BASE_URL` and model variables in `.env`.
 
 ## Supported Uploads
 

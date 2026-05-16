@@ -104,8 +104,8 @@ export default function Home() {
   const allRequirements = documents.flatMap((document) => document.requirements);
   const allRisks = documents.flatMap((document) => document.risks);
   const allEntities = documents.flatMap((document) => document.entities);
-  const userStories = useMemo(() => buildUserStories(allRequirements), [allRequirements]);
-  const testCases = useMemo(() => buildTestCases(allRequirements, allRisks), [allRequirements, allRisks]);
+  const userStories = useMemo(() => buildUserStories(allRequirements, documents), [allRequirements, documents]);
+  const testCases = useMemo(() => buildTestCases(allRequirements, allRisks, documents), [allRequirements, allRisks, documents]);
   const knowledgeGaps = useMemo(() => findKnowledgeGaps(documents), [documents]);
   const agentInsights = useMemo(() => buildAgentInsights(documents), [documents]);
   const enterpriseControls = useMemo(() => buildEnterpriseControls(documents), [documents]);

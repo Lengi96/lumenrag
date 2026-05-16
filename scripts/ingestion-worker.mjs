@@ -1,6 +1,8 @@
 import { Worker } from "bullmq";
 import { IngestionJobStatus } from "@prisma/client";
 import { analyzeDocument } from "../src/lib/knowledge.ts";
+import { extractStructuredKnowledge } from "../src/lib/ai/langchain-extraction-provider.ts";
+import { applyStructuredExtraction } from "../src/lib/ai/structured-extraction.ts";
 import { parseUploadedBuffer } from "../src/lib/server/document-parser.ts";
 import { appendWorkspaceDocuments } from "../src/lib/server/workspace-store.ts";
 import { ingestionQueueName, updateIngestionJob } from "../src/lib/server/ingestion-queue.ts";
@@ -50,13 +52,22 @@ const worker = new Worker(
     });
 
     await setProgress(payload.jobId, 45, "chunking-and-extraction");
-    const document = analyzeDocument({
+    let document = analyzeDocument({
       id: stableId(`${payload.fileName}-${payload.size}-${payload.lastModified}`),
       title: payload.fileName,
       type: payload.mimeType || "text/plain",
       size: payload.size,
       content: parsed.content,
     });
+
+    if (process.env.EXTRACTION_PROVIDER === "langchain") {
+      await setProgress(payload.jobId, 60, "langchain-structured-extraction");
+      const extraction = await extractStructuredKnowledge({
+        documentTitle: document.title,
+        content: document.content,
+      });
+      document = applyStructuredExtraction(document, extraction);
+    }
 
     await setProgress(payload.jobId, 70, "persisting");
     await appendWorkspaceDocuments([

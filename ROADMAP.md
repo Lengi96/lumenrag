@@ -124,15 +124,15 @@ Acceptance criteria:
 
 Goal: Turn heuristic extraction into reliable, schema-based AI workflows.
 
-- `[ ]` Add Zod schemas for requirements, risks, entities, relations and test cases
-- `[ ]` Add OpenAI structured extraction provider
-- `[ ]` Add local-model compatible JSON extraction mode
-- `[ ]` Generate user stories from requirements
-- `[ ]` Generate acceptance criteria
-- `[ ]` Generate test cases and Gherkin scenarios
-- `[ ]` Detect contradictions between documents
-- `[ ]` Detect missing requirements or ambiguous language
-- `[ ]` Store extraction confidence and source evidence
+- `[x]` Add Zod schemas for requirements, risks, entities, relations and test cases
+- `[x]` Add OpenAI structured extraction provider
+- `[x]` Add local-model compatible JSON extraction mode
+- `[x]` Generate user stories from requirements
+- `[x]` Generate acceptance criteria
+- `[x]` Generate test cases and Gherkin scenarios
+- `[x]` Detect contradictions between documents
+- `[x]` Detect missing requirements or ambiguous language
+- `[x]` Store extraction confidence and source evidence
 
 Acceptance criteria:
 
