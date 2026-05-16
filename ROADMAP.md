@@ -27,7 +27,7 @@ Status legend:
 Goal: A developer or company evaluator can clone the repo and run a complete local stack without guessing.
 
 - `[x]` Create production-ready `Dockerfile` for the Next.js app
-- `[ ]` Extend `docker-compose.yml` to run app + Postgres + Redis + MinIO together
+- `[x]` Extend `docker-compose.yml` to run app + Postgres + Redis + MinIO together
 - `[ ]` Add `docker compose up` quickstart path that works from a fresh clone
 - `[ ]` Add seed/demo workspace command
 - `[ ]` Add screenshots or GIFs to README
