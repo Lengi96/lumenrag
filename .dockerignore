@@ -1,0 +1,14 @@
+.git
+.next
+node_modules
+npm-debug.log*
+Dockerfile
+docker-compose*.yml
+.env
+.env*.local
+.playwright-mcp
+coverage
+dist
+README.md
+ROADMAP.md
+docs
