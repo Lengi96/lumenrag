@@ -66,15 +66,15 @@ Acceptance criteria:
 
 Goal: Make the chat feel like a real AI product with traceable sources.
 
-- `[ ]` Wire `/api/chat/stream` into the UI
-- `[ ]` Stream answer tokens live
-- `[ ]` Show citations before or during the streamed answer
-- `[ ]` Add stop/cancel generation button
-- `[ ]` Persist conversations and messages
-- `[ ]` Add conversation history sidebar
-- `[ ]` Add conversation memory with bounded context
-- `[ ]` Add "only answer from sources" grounding mode
-- `[ ]` Add no-context and low-confidence response states
+- `[x]` Wire `/api/chat/stream` into the UI
+- `[x]` Stream answer tokens live
+- `[x]` Show citations before or during the streamed answer
+- `[x]` Add stop/cancel generation button
+- `[x]` Persist conversations and messages
+- `[x]` Add conversation history sidebar
+- `[x]` Add conversation memory with bounded context
+- `[x]` Add "only answer from sources" grounding mode
+- `[x]` Add no-context and low-confidence response states
 
 Acceptance criteria:
 

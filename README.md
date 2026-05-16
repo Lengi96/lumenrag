@@ -15,6 +15,7 @@ It is inspired by graph-based RAG architectures, but implemented as a TypeScript
 - Chunking
 - Keyword/semantic-style search
 - Source-grounded answer generation
+- Streaming chat UI with citations, stop control, source-only mode and DB-backed conversation history
 - Document classification
 - Requirement extraction
 - Risk extraction
@@ -88,6 +89,8 @@ OPENAI_API_KEY="..."
 When the key is present, `/api/chat` uses OpenAI for grounded answer generation. Without a key, the app falls back to the local deterministic answer generator.
 
 When PostgreSQL is enabled, uploaded documents and chunks are persisted through Prisma. If `OPENAI_API_KEY` is configured, LumenRAG stores `text-embedding-3-small` embeddings in pgvector and `/api/search` uses hybrid vector plus full-text retrieval. Without an embedding provider, search falls back to PostgreSQL full-text and then to local heuristic retrieval.
+
+The chat UI uses `/api/chat/stream` for live token streaming. Citations are shown during generation, responses can be stopped, and conversations are persisted when PostgreSQL is enabled.
 
 ## Supported Uploads
 

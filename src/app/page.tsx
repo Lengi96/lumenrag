@@ -19,6 +19,7 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  StopCircle,
   Upload,
   Workflow,
 } from "lucide-react";
@@ -40,12 +41,39 @@ import type { KnowledgeDocument, MindmapNode, Requirement, SearchResult, TestCas
 
 const workspaceStorageKey = "lumenrag.workspace.v1";
 type PersistenceMode = "loading" | "database" | "local";
+type ChatCitation = {
+  id: number;
+  documentId: string;
+  chunkId: string;
+  title: string;
+  quote?: string;
+  score: number;
+  matchReason?: string;
+  vectorScore?: number;
+  textScore?: number;
+};
+type ConversationSummary = {
+  id: string;
+  title: string;
+  updatedAt: string;
+  messageCount: number;
+};
+type RetrievalState = {
+  mode?: string;
+  resultCount: number;
+  confidence: "none" | "low" | "medium" | "high";
+};
 
 export default function Home() {
   const [documents, setDocuments] = useState<KnowledgeDocument[]>(sampleDocuments);
   const [query, setQuery] = useState("Welche Risiken und Anforderungen gibt es?");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [answer, setAnswer] = useState("");
+  const [citations, setCitations] = useState<ChatCitation[]>([]);
+  const [retrievalState, setRetrievalState] = useState<RetrievalState>({ resultCount: 0, confidence: "none" });
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [onlySources, setOnlySources] = useState(true);
   const [selectedNode, setSelectedNode] = useState<MindmapNode | null>(null);
   const [activeTab, setActiveTab] = useState<
     "chat" | "documents" | "mindmap" | "requirements" | "qa" | "risks" | "agents" | "enterprise" | "architecture"
@@ -56,6 +84,7 @@ export default function Home() {
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const skipNextDatabaseSaveRef = useRef(false);
+  const streamAbortRef = useRef<AbortController | null>(null);
   const graph = useMemo(() => buildMindmap(documents), [documents]);
   const allRequirements = documents.flatMap((document) => document.requirements);
   const allRisks = documents.flatMap((document) => document.risks);
@@ -152,6 +181,22 @@ export default function Home() {
     return () => window.clearTimeout(timeout);
   }, [documents, persistenceMode, workspaceLoaded]);
 
+  useEffect(() => {
+    if (persistenceMode !== "database") return;
+    void loadConversations();
+  }, [persistenceMode]);
+
+  async function loadConversations() {
+    try {
+      const response = await fetch("/api/conversations", { cache: "no-store" });
+      if (!response.ok) return;
+      const payload = (await response.json()) as { conversations?: ConversationSummary[] };
+      setConversations(payload.conversations ?? []);
+    } catch {
+      setConversations([]);
+    }
+  }
+
   async function onUpload(files: FileList | null) {
     if (!files?.length) return;
     setIsBusy(true);
@@ -179,26 +224,111 @@ export default function Home() {
 
   async function runSearch() {
     setIsBusy(true);
+    setAnswer("");
+    setResults([]);
+    setCitations([]);
+    setRetrievalState({ resultCount: 0, confidence: "none" });
+    const abortController = new AbortController();
+    streamAbortRef.current = abortController;
+
     try {
-      const [searchResponse, chatResponse] = await Promise.all([
-        fetch("/api/search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query, documents, limit: 8 }),
-        }),
-        fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query, documents }),
-        }),
-      ]);
-      if (!searchResponse.ok || !chatResponse.ok) throw new Error("Search failed");
-      const searchPayload = (await searchResponse.json()) as { results: SearchResult[] };
-      const chatPayload = (await chatResponse.json()) as { answer: string };
-      setResults(searchPayload.results);
-      setAnswer(chatPayload.answer);
+      const response = await fetch("/api/chat/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, documents, conversationId: activeConversationId, onlySources }),
+        signal: abortController.signal,
+      });
+      if (!response.ok || !response.body) throw new Error("Streaming search failed");
+
+      await readEventStream(response.body);
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
+        setAnswer("Die Suche konnte nicht abgeschlossen werden.");
+      }
     } finally {
       setIsBusy(false);
+      streamAbortRef.current = null;
+    }
+  }
+
+  function stopGeneration() {
+    streamAbortRef.current?.abort();
+    setIsBusy(false);
+  }
+
+  async function readEventStream(body: ReadableStream<Uint8Array>) {
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split("\n\n");
+      buffer = events.pop() ?? "";
+
+      for (const rawEvent of events) {
+        handleStreamEvent(rawEvent);
+      }
+    }
+  }
+
+  function handleStreamEvent(rawEvent: string) {
+    const event = rawEvent
+      .split("\n")
+      .find((line) => line.startsWith("event: "))
+      ?.slice(7);
+    const data = rawEvent
+      .split("\n")
+      .find((line) => line.startsWith("data: "))
+      ?.slice(6);
+
+    if (!event || data === undefined) return;
+
+    const payload = JSON.parse(data) as unknown;
+    if (event === "citations") {
+      setCitations(Array.isArray(payload) ? (payload as ChatCitation[]) : []);
+    }
+    if (event === "retrieval") {
+      setRetrievalState(payload as RetrievalState);
+    }
+    if (event === "results") {
+      setResults(Array.isArray(payload) ? (payload as SearchResult[]) : []);
+    }
+    if (event === "token") {
+      setAnswer((current) => `${current}${String(payload)}`);
+    }
+    if (event === "done") {
+      const donePayload = payload as { conversation?: { id: string } | null };
+      if (donePayload.conversation?.id) {
+        setActiveConversationId(donePayload.conversation.id);
+        void loadConversations();
+      }
+    }
+  }
+
+  async function loadConversation(conversationId: string) {
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}`, { cache: "no-store" });
+      if (!response.ok) return;
+      const payload = (await response.json()) as {
+        conversation?: {
+          id: string;
+          messages: { role: string; content: string; citations?: unknown }[];
+        };
+      };
+      const messages = payload.conversation?.messages ?? [];
+      const lastUserMessage = [...messages].reverse().find((message) => message.role === "user");
+      const lastAssistantMessage = [...messages].reverse().find((message) => message.role === "assistant");
+      setActiveConversationId(conversationId);
+      setQuery(lastUserMessage?.content ?? query);
+      setAnswer(lastAssistantMessage?.content ?? "");
+      setCitations(Array.isArray(lastAssistantMessage?.citations) ? (lastAssistantMessage.citations as ChatCitation[]) : []);
+      setResults([]);
+      setRetrievalState({ resultCount: Array.isArray(lastAssistantMessage?.citations) ? lastAssistantMessage.citations.length : 0, confidence: "medium" });
+    } catch {
+      // Keep the active chat unchanged if history loading fails.
     }
   }
 
@@ -231,6 +361,9 @@ export default function Home() {
     setDocuments(sampleDocuments);
     setResults([]);
     setAnswer("");
+    setCitations([]);
+    setActiveConversationId(null);
+    setRetrievalState({ resultCount: 0, confidence: "none" });
     window.localStorage.removeItem(workspaceStorageKey);
     if (persistenceMode === "database") {
       void fetch("/api/workspace", { method: "DELETE" }).catch(() => setPersistenceMode("local"));
@@ -360,26 +493,63 @@ export default function Home() {
                     className="min-h-11 flex-1 rounded-md border border-white/10 bg-black/25 px-4 text-sm outline-none ring-cyan-300/30 transition focus:ring-4"
                     placeholder="Frage an alle Dokumente stellen..."
                   />
-                  <button
-                    onClick={runSearch}
-                    disabled={isBusy}
-                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-white px-4 text-sm font-semibold text-slate-950 transition hover:bg-slate-200"
-                  >
-                    <Search size={16} />
-                    Suchen
-                  </button>
+                  {isBusy ? (
+                    <button
+                      onClick={stopGeneration}
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-red-300/30 bg-red-300/15 px-4 text-sm font-semibold text-red-100 transition hover:bg-red-300/20"
+                    >
+                      <StopCircle size={16} />
+                      Stop
+                    </button>
+                  ) : (
+                    <button
+                      onClick={runSearch}
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-white px-4 text-sm font-semibold text-slate-950 transition hover:bg-slate-200"
+                    >
+                      <Search size={16} />
+                      Suchen
+                    </button>
+                  )}
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={onlySources}
+                      onChange={(event) => setOnlySources(event.target.checked)}
+                      className="size-4 accent-cyan-300"
+                    />
+                    Nur aus Quellen antworten
+                  </label>
+                  <span>
+                    {retrievalState.mode
+                      ? `${retrievalState.mode} · ${retrievalState.resultCount} Treffer · ${retrievalState.confidence} confidence`
+                      : "Bereit fuer quellenbasierte Suche"}
+                  </span>
                 </div>
 
                 <div className="mt-5 rounded-lg border border-white/10 bg-[#0b1514] p-5">
+                  {retrievalState.confidence === "none" && answer && (
+                    <div className="mb-4 rounded-md border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">
+                      Keine belastbaren Quellen gefunden.
+                    </div>
+                  )}
+                  {retrievalState.confidence === "low" && (
+                    <div className="mb-4 rounded-md border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">
+                      Niedrige Retrieval-Konfidenz. Pruefe die Quellen, bevor du die Antwort uebernimmst.
+                    </div>
+                  )}
                   {answer ? (
                     <div className="prose prose-invert max-w-none prose-headings:text-slate-100 prose-a:text-cyan-200">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{answer}</ReactMarkdown>
+                      {isBusy && <span className="inline-block h-4 w-2 animate-pulse bg-cyan-200 align-middle" />}
                     </div>
                   ) : (
                     <div className="flex min-h-56 flex-col items-center justify-center text-center text-slate-400">
                       <Brain className="mb-4 text-cyan-200" size={34} />
                       <p className="max-w-md text-sm">
-                        Starte eine Suche. Der MVP erzeugt eine quellenbasierte Antwort aus lokalen Chunks und ist fÃ¼r OpenAI Streaming vorbereitet.
+                        Starte eine Suche. Antworten werden live gestreamt und zeigen Quellen, sobald Retrieval abgeschlossen ist.
                       </p>
                     </div>
                   )}
@@ -387,11 +557,51 @@ export default function Home() {
               </section>
 
               <aside className="rounded-lg border border-white/10 bg-white/[0.035] p-5">
+                <div className="mb-5">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-slate-200">Unterhaltungen</h3>
+                    <button
+                      onClick={() => {
+                        setActiveConversationId(null);
+                        setAnswer("");
+                        setCitations([]);
+                        setResults([]);
+                        setRetrievalState({ resultCount: 0, confidence: "none" });
+                      }}
+                      className="rounded border border-white/10 px-2 py-1 text-xs text-slate-300 transition hover:bg-white/8"
+                    >
+                      Neu
+                    </button>
+                  </div>
+                  {persistenceMode !== "database" ? (
+                    <p className="text-xs leading-5 text-slate-500">Conversation History wird aktiv, wenn DB Autosave verfuegbar ist.</p>
+                  ) : conversations.length === 0 ? (
+                    <p className="text-xs leading-5 text-slate-500">Noch keine gespeicherten Unterhaltungen.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {conversations.slice(0, 6).map((conversation) => (
+                        <button
+                          key={conversation.id}
+                          onClick={() => void loadConversation(conversation.id)}
+                          className={`w-full rounded-md border px-3 py-2 text-left text-xs transition ${
+                            activeConversationId === conversation.id
+                              ? "border-cyan-300/35 bg-cyan-300/10 text-cyan-50"
+                              : "border-white/10 bg-black/20 text-slate-400 hover:bg-white/8"
+                          }`}
+                        >
+                          <span className="block truncate font-medium">{conversation.title}</span>
+                          <span className="mt-1 block text-[11px] text-slate-500">{conversation.messageCount} Nachrichten</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <h3 className="mb-4 text-sm font-semibold text-slate-200">Quellen & Highlights</h3>
                 <div className="space-y-3">
-                  {results.length === 0 ? (
+                  {results.length === 0 && citations.length === 0 ? (
                     <p className="text-sm text-slate-400">Noch keine Suchergebnisse.</p>
-                  ) : (
+                  ) : results.length > 0 ? (
                     results.map((result) => (
                       <article key={result.chunk.id} className="rounded-md border border-white/10 bg-black/20 p-3">
                         <div className="mb-2 flex items-center justify-between gap-3">
@@ -399,6 +609,7 @@ export default function Home() {
                           <span className="text-xs text-cyan-200">{result.score.toFixed(2)}</span>
                         </div>
                         <p className="line-clamp-4 text-xs leading-5 text-slate-400">{result.chunk.content}</p>
+                        {result.matchReason && <p className="mt-2 text-[11px] leading-4 text-slate-500">{result.matchReason}</p>}
                         <div className="mt-3 flex flex-wrap gap-1.5">
                           {result.highlights.map((highlight) => (
                             <span key={highlight} className="rounded bg-cyan-300/15 px-2 py-1 text-xs text-cyan-100">
@@ -406,6 +617,17 @@ export default function Home() {
                             </span>
                           ))}
                         </div>
+                      </article>
+                    ))
+                  ) : (
+                    citations.map((citation) => (
+                      <article key={citation.chunkId} className="rounded-md border border-white/10 bg-black/20 p-3">
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                          <p className="text-sm font-medium text-slate-100">{citation.title}</p>
+                          <span className="text-xs text-cyan-200">{citation.score.toFixed(2)}</span>
+                        </div>
+                        <p className="line-clamp-4 text-xs leading-5 text-slate-400">{citation.quote}</p>
+                        {citation.matchReason && <p className="mt-2 text-[11px] leading-4 text-slate-500">{citation.matchReason}</p>}
                       </article>
                     ))
                   )}
