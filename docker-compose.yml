@@ -14,13 +14,25 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       minio:
         condition: service_healthy
     restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      target: builder
+    command: npx prisma migrate deploy
+    environment:
+      DATABASE_URL: postgresql://lumenrag:lumenrag@postgres:5432/lumenrag?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
 
   postgres:
     image: pgvector/pgvector:pg16

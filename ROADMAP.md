@@ -28,7 +28,7 @@ Goal: A developer or company evaluator can clone the repo and run a complete loc
 
 - `[x]` Create production-ready `Dockerfile` for the Next.js app
 - `[x]` Extend `docker-compose.yml` to run app + Postgres + Redis + MinIO together
-- `[ ]` Add `docker compose up` quickstart path that works from a fresh clone
+- `[x]` Add `docker compose up` quickstart path that works from a fresh clone
 - `[ ]` Add seed/demo workspace command
 - `[ ]` Add screenshots or GIFs to README
 - `[ ]` Add GitHub Actions CI for lint, build and Prisma validation

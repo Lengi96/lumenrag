@@ -32,6 +32,20 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## Docker Quickstart
+
+From a fresh clone with Docker Desktop or Docker Engine running:
+
+```bash
+docker compose up --build
+```
+
+Open `http://localhost:3000`.
+
+This starts the Next.js app, PostgreSQL with `pgvector`, Redis and MinIO. The compose stack also runs `prisma migrate deploy` before the app starts, so the database schema is created automatically.
+
+OpenAI is optional. Without `OPENAI_API_KEY`, LumenRAG uses the local deterministic answer generator and no chat prompts are sent to OpenAI. To enable OpenAI-backed answers, create `.env` from `.env.example` and set `OPENAI_API_KEY` before starting the stack.
+
 ## Optional PostgreSQL Persistence
 
 The app works without a database and falls back to browser-local autosave. To enable server-side persistence:
