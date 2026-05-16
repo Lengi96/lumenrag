@@ -1,5 +1,8 @@
 import { DocumentStatus } from "@prisma/client";
+import { OpenAIProvider } from "@/lib/ai/openai-provider";
+import { MissingProviderError } from "@/lib/ai/provider";
 import { prisma } from "./prisma";
+import { toPgVector } from "./pgvector";
 import type { Entity, KnowledgeDocument, Requirement, Risk } from "@/lib/types";
 
 export const demoOrganizationSlug = "demo-org";
@@ -164,6 +167,86 @@ export async function saveWorkspaceDocuments(documents: KnowledgeDocument[]) {
     }
   });
 
+  await storeEmbeddingsForDocuments(documents);
+
+  return { workspaceId: workspace.id, documentCount: documents.length };
+}
+
+export async function appendWorkspaceDocuments(documents: KnowledgeDocument[]) {
+  const workspace = await ensureDemoWorkspace();
+
+  await prisma.$transaction(async (tx) => {
+    for (const document of documents) {
+      await tx.document.deleteMany({
+        where: {
+          workspaceId: workspace.id,
+          OR: [{ id: document.id }, { checksum: document.id }],
+        },
+      });
+
+      await tx.document.create({
+        data: {
+          id: document.id,
+          workspaceId: workspace.id,
+          title: document.title,
+          sourceType: document.type,
+          mimeType: document.type,
+          checksum: document.id,
+          status: DocumentStatus.INDEXED,
+          summary: document.summary,
+          metadata: {
+            ...(document.metadata ?? {}),
+            size: document.size,
+            content: document.content,
+            tags: document.tags,
+            classification: document.classification,
+          },
+          chunks: {
+            create: document.chunks.map((chunk) => ({
+              id: chunk.id,
+              workspaceId: workspace.id,
+              index: chunk.index,
+              content: chunk.content,
+              tokenCount: chunk.tokenCount,
+              metadata: { keywords: chunk.keywords },
+            })),
+          },
+          entities: {
+            create: document.entities.map((entity) => ({
+              id: entity.id,
+              workspaceId: workspace.id,
+              name: entity.name,
+              type: entity.type,
+              aliases: [],
+              confidence: Math.max(0.1, Math.min(1, entity.weight / 10)),
+            })),
+          },
+          requirements: {
+            create: document.requirements.map((requirement) => ({
+              id: requirement.id,
+              workspaceId: workspace.id,
+              title: requirement.title,
+              statement: requirement.statement,
+              priority: requirement.priority,
+              confidence: requirement.confidence,
+            })),
+          },
+          risks: {
+            create: document.risks.map((risk) => ({
+              id: risk.id,
+              workspaceId: workspace.id,
+              title: risk.title,
+              evidence: risk.evidence,
+              severity: risk.severity,
+            })),
+          },
+        },
+      });
+    }
+  });
+
+  await storeEmbeddingsForDocuments(documents);
+
   return { workspaceId: workspace.id, documentCount: documents.length };
 }
 
@@ -198,4 +281,35 @@ function normalizeSeverity(severity: string): Risk["severity"] {
     return severity as Risk["severity"];
   }
   return "low";
+}
+
+async function storeEmbeddingsForDocuments(documents: KnowledgeDocument[]) {
+  if (!process.env.OPENAI_API_KEY) return;
+
+  const chunks = documents.flatMap((document) => document.chunks);
+  if (chunks.length === 0) return;
+
+  try {
+    const provider = new OpenAIProvider();
+    const batchSize = 64;
+
+    for (let index = 0; index < chunks.length; index += batchSize) {
+      const batch = chunks.slice(index, index + batchSize);
+      const embeddings = await provider.embed(batch.map((chunk) => chunk.content));
+
+      for (const [batchIndex, embedding] of embeddings.entries()) {
+        const chunk = batch[batchIndex];
+        if (!chunk || embedding.length === 0) continue;
+        await prisma.$executeRawUnsafe(
+          'UPDATE "Chunk" SET embedding = $1::vector WHERE id = $2',
+          toPgVector(embedding),
+          chunk.id,
+        );
+      }
+    }
+  } catch (error) {
+    if (!(error instanceof MissingProviderError)) {
+      console.error("Embedding generation failed; documents remain searchable via full-text fallback", error);
+    }
+  }
 }

@@ -55,6 +55,7 @@ export default function Home() {
   const [persistenceMode, setPersistenceMode] = useState<PersistenceMode>("loading");
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const skipNextDatabaseSaveRef = useRef(false);
   const graph = useMemo(() => buildMindmap(documents), [documents]);
   const allRequirements = documents.flatMap((document) => document.requirements);
   const allRisks = documents.flatMap((document) => document.risks);
@@ -129,6 +130,11 @@ export default function Home() {
     );
 
     if (persistenceMode !== "database") return;
+    if (skipNextDatabaseSaveRef.current) {
+      skipNextDatabaseSaveRef.current = false;
+      setLastSavedAt(new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }));
+      return;
+    }
 
     const timeout = window.setTimeout(() => {
       void fetch("/api/workspace", {
@@ -157,7 +163,13 @@ export default function Home() {
         body: formData,
       });
       if (!response.ok) throw new Error("Upload analysis failed");
-      const payload = (await response.json()) as { documents: KnowledgeDocument[] };
+      const payload = (await response.json()) as {
+        documents: KnowledgeDocument[];
+        persistence?: { mode?: "database" | "local" };
+      };
+      if (payload.persistence?.mode === "database" && persistenceMode === "database") {
+        skipNextDatabaseSaveRef.current = true;
+      }
       setDocuments((current) => [...payload.documents, ...current]);
       setActiveTab("mindmap");
     } finally {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { searchDocuments } from "@/lib/knowledge";
+import { retrieveWorkspace } from "@/lib/server/retrieval";
 import type { KnowledgeDocument } from "@/lib/types";
 
 type SearchBody = {
@@ -15,6 +15,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Query is required" }, { status: 400 });
   }
 
-  const results = searchDocuments(body.documents ?? [], body.query, body.limit ?? 8);
-  return NextResponse.json({ results });
+  const retrieval = await retrieveWorkspace(body.query, body.documents ?? [], body.limit ?? 8);
+  return NextResponse.json(retrieval);
 }

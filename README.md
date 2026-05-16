@@ -22,6 +22,7 @@ It is inspired by graph-based RAG architectures, but implemented as a TypeScript
 - Interactive mindmap from uploaded documents
 - Browser-local workspace autosave
 - Optional PostgreSQL workspace persistence through Prisma
+- PostgreSQL full-text retrieval with optional OpenAI embeddings and pgvector hybrid search
 - Workspace import/export as JSON
 - API routes for upload, search, chat, graph, stream, export and workspace storage
 - Prisma schema and migration for PostgreSQL + pgvector
@@ -85,6 +86,8 @@ OPENAI_API_KEY="..."
 ```
 
 When the key is present, `/api/chat` uses OpenAI for grounded answer generation. Without a key, the app falls back to the local deterministic answer generator.
+
+When PostgreSQL is enabled, uploaded documents and chunks are persisted through Prisma. If `OPENAI_API_KEY` is configured, LumenRAG stores `text-embedding-3-small` embeddings in pgvector and `/api/search` uses hybrid vector plus full-text retrieval. Without an embedding provider, search falls back to PostgreSQL full-text and then to local heuristic retrieval.
 
 ## Supported Uploads
 

@@ -46,15 +46,15 @@ Acceptance criteria:
 
 Goal: Replace heuristic search with actual RAG-quality retrieval.
 
-- `[ ]` Persist uploaded documents and chunks through Prisma by default
-- `[ ]` Generate embeddings for chunks using OpenAI `text-embedding-3-small`
-- `[ ]` Store embeddings in PostgreSQL `pgvector`
-- `[ ]` Add vector similarity search API
-- `[ ]` Add PostgreSQL full-text search
-- `[ ]` Implement hybrid retrieval: vector + full-text + document metadata
-- `[ ]` Add retrieval score explanation in API response
-- `[ ]` Add fallback behavior when no embedding provider is configured
-- `[ ]` Add basic retrieval tests with sample documents
+- `[x]` Persist uploaded documents and chunks through Prisma by default
+- `[x]` Generate embeddings for chunks using OpenAI `text-embedding-3-small`
+- `[x]` Store embeddings in PostgreSQL `pgvector`
+- `[x]` Add vector similarity search API
+- `[x]` Add PostgreSQL full-text search
+- `[x]` Implement hybrid retrieval: vector + full-text + document metadata
+- `[x]` Add retrieval score explanation in API response
+- `[x]` Add fallback behavior when no embedding provider is configured
+- `[x]` Add basic retrieval tests with sample documents
 
 Acceptance criteria:
 

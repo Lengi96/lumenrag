@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { generateAnswer, searchDocuments } from "@/lib/knowledge";
+import { generateAnswer } from "@/lib/knowledge";
 import { OpenAIProvider } from "@/lib/ai/openai-provider";
 import { MissingProviderError } from "@/lib/ai/provider";
 import { buildContextBlock, groundedAnswerSystemPrompt } from "@/lib/rag/prompts";
+import { retrieveWorkspace } from "@/lib/server/retrieval";
 import type { KnowledgeDocument } from "@/lib/types";
 
 type ChatBody = {
@@ -17,9 +18,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Query is required" }, { status: 400 });
   }
 
-  const results = searchDocuments(body.documents ?? [], body.query, 8);
+  const retrieval = await retrieveWorkspace(body.query, body.documents ?? [], 8);
+  const results = retrieval.results;
   let answer = generateAnswer(body.query, results);
-  let strategy = "local-hybrid";
+  let strategy: string = retrieval.mode;
 
   if (process.env.OPENAI_API_KEY && results.length > 0) {
     try {
@@ -35,7 +37,7 @@ export async function POST(request: Request) {
           })),
         ),
       });
-      strategy = "openai-grounded";
+      strategy = `openai-grounded-${retrieval.mode}`;
     } catch (error) {
       if (!(error instanceof MissingProviderError)) {
         console.error("OpenAI answer generation failed, falling back to local answer", error);
@@ -52,10 +54,14 @@ export async function POST(request: Request) {
       title: result.chunk.documentTitle,
       quote: result.chunk.content.slice(0, 420),
       score: result.score,
+      matchReason: result.matchReason,
+      vectorScore: result.vectorScore,
+      textScore: result.textScore,
     })),
     retrieval: {
       strategy,
       resultCount: results.length,
+      embeddingProviderConfigured: retrieval.embeddingProviderConfigured,
     },
   });
 }

@@ -97,6 +97,9 @@ export type SearchResult = {
   chunk: KnowledgeChunk;
   score: number;
   highlights: string[];
+  matchReason?: string;
+  vectorScore?: number;
+  textScore?: number;
 };
 
 export type MindmapNode = {

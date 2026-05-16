@@ -1,4 +1,4 @@
-import { searchDocuments } from "@/lib/knowledge";
+import { retrieveWorkspace } from "@/lib/server/retrieval";
 import type { KnowledgeDocument } from "@/lib/types";
 
 type StreamBody = {
@@ -13,18 +13,20 @@ export async function POST(request: Request) {
     return new Response("Query is required", { status: 400 });
   }
 
-  const results = searchDocuments(body.documents ?? [], body.query, 8);
+  const retrieval = await retrieveWorkspace(body.query, body.documents ?? [], 8);
+  const results = retrieval.results;
   const citations = results.slice(0, 5).map((result, index) => ({
     id: index + 1,
     documentId: result.chunk.documentId,
     chunkId: result.chunk.id,
     title: result.chunk.documentTitle,
     score: result.score,
+    matchReason: result.matchReason,
   }));
   const text =
     results.length === 0
       ? "Ich habe in den indexierten Dokumenten keine belastbare Quelle fuer diese Frage gefunden."
-      : `Ich habe ${results.length} relevante Quellen gefunden. Die staerksten Treffer stammen aus ${citations
+      : `Ich habe ${results.length} relevante Quellen mit ${retrieval.mode} gefunden. Die staerksten Treffer stammen aus ${citations
           .map((citation) => citation.title)
           .slice(0, 3)
           .join(", ")}.`;

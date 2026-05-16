@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { analyzeDocument } from "@/lib/knowledge";
 import { parseUploadedFile } from "@/lib/server/document-parser";
+import { isDatabaseConfigured } from "@/lib/server/prisma";
+import { appendWorkspaceDocuments } from "@/lib/server/workspace-store";
 
 export const runtime = "nodejs";
 
@@ -32,7 +34,16 @@ export async function POST(request: Request) {
     }),
   );
 
-  return NextResponse.json({ documents });
+  if (isDatabaseConfigured()) {
+    try {
+      const persistence = await appendWorkspaceDocuments(documents);
+      return NextResponse.json({ documents, persistence: { mode: "database", ...persistence } });
+    } catch (error) {
+      console.error("Document persistence failed; returning analyzed documents for browser-local fallback", error);
+    }
+  }
+
+  return NextResponse.json({ documents, persistence: { mode: "local" } });
 }
 
 function stableId(input: string): string {
