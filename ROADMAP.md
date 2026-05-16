@@ -104,15 +104,15 @@ Acceptance criteria:
 
 Goal: Large documents are processed reliably without blocking API requests.
 
-- `[ ]` Choose queue implementation: BullMQ + Redis or pg-boss
-- `[ ]` Add ingestion job table/status model
-- `[ ]` Move parsing into worker job
-- `[ ]` Move chunking into worker job
-- `[ ]` Move embeddings into worker job
-- `[ ]` Move requirement/risk/entity extraction into worker job
-- `[ ]` Add retry and failure states
-- `[ ]` Add progress UI
-- `[ ]` Add cancellation/reprocess actions
+- `[x]` Choose queue implementation: BullMQ + Redis or pg-boss
+- `[x]` Add ingestion job table/status model
+- `[x]` Move parsing into worker job
+- `[x]` Move chunking into worker job
+- `[x]` Move embeddings into worker job
+- `[x]` Move requirement/risk/entity extraction into worker job
+- `[x]` Add retry and failure states
+- `[x]` Add progress UI
+- `[x]` Add cancellation/reprocess actions
 
 Acceptance criteria:
 

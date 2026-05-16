@@ -16,14 +16,16 @@ import {
   Lock,
   Moon,
   Network,
+  RefreshCw,
   Search,
   ShieldCheck,
   Sparkles,
   StopCircle,
   Upload,
   Workflow,
+  XCircle,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MindmapCanvas } from "@/components/MindmapCanvas";
@@ -63,6 +65,16 @@ type RetrievalState = {
   resultCount: number;
   confidence: "none" | "low" | "medium" | "high";
 };
+type IngestionJobView = {
+  id: string;
+  fileName: string;
+  documentId: string | null;
+  status: "queued" | "processing" | "indexed" | "failed" | "canceled";
+  progress: number;
+  stage: string;
+  attempts: number;
+  error: string | null;
+};
 
 export default function Home() {
   const [documents, setDocuments] = useState<KnowledgeDocument[]>(sampleDocuments);
@@ -72,6 +84,7 @@ export default function Home() {
   const [citations, setCitations] = useState<ChatCitation[]>([]);
   const [retrievalState, setRetrievalState] = useState<RetrievalState>({ resultCount: 0, confidence: "none" });
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [ingestionJobs, setIngestionJobs] = useState<IngestionJobView[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [onlySources, setOnlySources] = useState(true);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
@@ -190,11 +203,6 @@ export default function Home() {
     return () => window.clearTimeout(timeout);
   }, [documents, persistenceMode, workspaceLoaded]);
 
-  useEffect(() => {
-    if (persistenceMode !== "database") return;
-    void loadConversations();
-  }, [persistenceMode]);
-
   async function loadConversations() {
     try {
       const response = await fetch("/api/conversations", { cache: "no-store" });
@@ -205,6 +213,55 @@ export default function Home() {
       setConversations([]);
     }
   }
+
+  const reloadDatabaseWorkspace = useCallback(async () => {
+    const response = await fetch("/api/workspace", { cache: "no-store" });
+    if (!response.ok) return;
+    const payload = (await response.json()) as { mode?: PersistenceMode; documents?: KnowledgeDocument[] };
+    if (payload.mode === "database" && Array.isArray(payload.documents)) {
+      setDocuments((current) => (payload.documents && payload.documents.length > 0 ? payload.documents : current));
+    }
+  }, []);
+
+  const loadIngestionJobs = useCallback(async (refreshWorkspaceOnCompletion = false) => {
+    try {
+      const previousActive = ingestionJobs.some((job) => job.status === "queued" || job.status === "processing");
+      const response = await fetch("/api/ingestion/jobs", { cache: "no-store" });
+      if (!response.ok) return;
+      const payload = (await response.json()) as { jobs?: IngestionJobView[] };
+      const jobs = payload.jobs ?? [];
+      setIngestionJobs(jobs);
+
+      const hasActive = jobs.some((job) => job.status === "queued" || job.status === "processing");
+      if (refreshWorkspaceOnCompletion && previousActive && !hasActive) {
+        await reloadDatabaseWorkspace();
+      }
+    } catch {
+      setIngestionJobs([]);
+    }
+  }, [ingestionJobs, reloadDatabaseWorkspace]);
+
+  useEffect(() => {
+    if (persistenceMode !== "database") return;
+    const timeout = window.setTimeout(() => {
+      void loadConversations();
+      void loadIngestionJobs();
+    }, 0);
+
+    return () => window.clearTimeout(timeout);
+  }, [loadIngestionJobs, persistenceMode]);
+
+  useEffect(() => {
+    if (persistenceMode !== "database") return;
+    const hasActiveJobs = ingestionJobs.some((job) => job.status === "queued" || job.status === "processing");
+    if (!hasActiveJobs) return;
+
+    const interval = window.setInterval(() => {
+      void loadIngestionJobs(true);
+    }, 1500);
+
+    return () => window.clearInterval(interval);
+  }, [ingestionJobs, loadIngestionJobs, persistenceMode]);
 
   async function onUpload(files: FileList | null) {
     if (!files?.length) return;
@@ -219,8 +276,14 @@ export default function Home() {
       if (!response.ok) throw new Error("Upload analysis failed");
       const payload = (await response.json()) as {
         documents: KnowledgeDocument[];
+        jobs?: IngestionJobView[];
         persistence?: { mode?: "database" | "local" };
       };
+      if (payload.jobs?.length) {
+        setIngestionJobs((current) => [...payload.jobs!, ...current]);
+        setActiveTab("documents");
+        return;
+      }
       if (payload.persistence?.mode === "database" && persistenceMode === "database") {
         skipNextDatabaseSaveRef.current = true;
       }
@@ -349,6 +412,17 @@ export default function Home() {
     setActiveTab("documents");
   }
 
+  async function updateIngestionJob(jobId: string, action: "cancel" | "retry") {
+    const response = await fetch(`/api/ingestion/jobs/${jobId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+    if (response.ok) {
+      await loadIngestionJobs();
+    }
+  }
+
   async function exportWorkspace() {
     const response = await fetch("/api/export", {
       method: "POST",
@@ -439,6 +513,70 @@ export default function Home() {
               onChange={(event) => void importWorkspace(event.target.files?.[0])}
             />
           </div>
+
+          {ingestionJobs.length > 0 && (
+            <div className="mb-5 rounded-lg border border-white/10 bg-black/20 p-3">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase text-slate-400">Ingestion Jobs</p>
+                <button
+                  onClick={() => void loadIngestionJobs(true)}
+                  className="rounded border border-white/10 p-1 text-slate-400 transition hover:bg-white/8"
+                  title="Jobs aktualisieren"
+                >
+                  <RefreshCw size={13} />
+                </button>
+              </div>
+              <div className="space-y-3">
+                {ingestionJobs.slice(0, 4).map((job) => (
+                  <div key={job.id} className="rounded-md border border-white/10 bg-white/[0.03] p-2">
+                    <div className="mb-2 flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-medium text-slate-200">{job.fileName}</p>
+                        <p className="mt-0.5 text-[11px] text-slate-500">{job.stage}</p>
+                      </div>
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[10px] uppercase ${
+                          job.status === "failed"
+                            ? "bg-red-300/15 text-red-100"
+                            : job.status === "indexed"
+                              ? "bg-emerald-300/15 text-emerald-100"
+                              : job.status === "canceled"
+                                ? "bg-slate-300/15 text-slate-300"
+                                : "bg-cyan-300/15 text-cyan-100"
+                        }`}
+                      >
+                        {job.status}
+                      </span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded bg-white/10">
+                      <div className="h-full bg-cyan-300 transition-all" style={{ width: `${job.progress}%` }} />
+                    </div>
+                    {job.error && <p className="mt-2 line-clamp-2 text-[11px] text-red-200">{job.error}</p>}
+                    <div className="mt-2 flex gap-2">
+                      {(job.status === "queued" || job.status === "processing") && (
+                        <button
+                          onClick={() => void updateIngestionJob(job.id, "cancel")}
+                          className="inline-flex items-center gap-1 rounded border border-red-300/25 px-2 py-1 text-[11px] text-red-100"
+                        >
+                          <XCircle size={12} />
+                          Cancel
+                        </button>
+                      )}
+                      {(job.status === "failed" || job.status === "canceled") && (
+                        <button
+                          onClick={() => void updateIngestionJob(job.id, "retry")}
+                          className="inline-flex items-center gap-1 rounded border border-cyan-300/25 px-2 py-1 text-[11px] text-cyan-100"
+                        >
+                          <RefreshCw size={12} />
+                          Retry
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <nav className="space-y-2">
             {[

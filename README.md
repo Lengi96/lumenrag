@@ -17,6 +17,7 @@ It is inspired by graph-based RAG architectures, but implemented as a TypeScript
 - Source-grounded answer generation
 - Streaming chat UI with citations, stop control, source-only mode and DB-backed conversation history
 - Document detail view with source chunks, citation links, match highlighting and Markdown/code/table preview
+- Worker-based ingestion queue with progress, retry and cancellation when PostgreSQL and Redis are enabled
 - Document classification
 - Requirement extraction
 - Risk extraction
@@ -50,6 +51,7 @@ docker compose up --build
 Open `http://localhost:3000`.
 
 This starts the Next.js app, PostgreSQL with `pgvector`, Redis and MinIO. The compose stack also runs `prisma migrate deploy` before the app starts, so the database schema is created automatically.
+The ingestion worker is started by Compose as well. Uploads return queued jobs quickly, while parsing, chunking, extraction, persistence and optional embeddings run in the worker.
 
 To load the demo workspace into the running Docker database:
 

@@ -16,9 +16,30 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      worker:
+        condition: service_started
       redis:
         condition: service_healthy
       minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      target: builder
+    command: npm run worker:ingest
+    environment:
+      DATABASE_URL: postgresql://lumenrag:lumenrag@postgres:5432/lumenrag?schema=public
+      REDIS_URL: redis://redis:6379
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4.1-mini}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
         condition: service_healthy
     restart: unless-stopped
 

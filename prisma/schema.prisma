@@ -22,6 +22,14 @@ enum DocumentStatus {
   ARCHIVED
 }
 
+enum IngestionJobStatus {
+  QUEUED
+  PROCESSING
+  INDEXED
+  FAILED
+  CANCELED
+}
+
 model Organization {
   id         String       @id @default(cuid())
   name       String
@@ -58,6 +66,7 @@ model Workspace {
   name           String
   slug           String
   documents      Document[]
+  ingestionJobs  IngestionJob[]
   conversations  Conversation[]
   searchQueries  SearchQuery[]
   organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -65,6 +74,27 @@ model Workspace {
   updatedAt      DateTime       @updatedAt
 
   @@unique([organizationId, slug])
+}
+
+model IngestionJob {
+  id          String             @id @default(cuid())
+  workspaceId String
+  documentId  String?
+  fileName    String
+  mimeType    String?
+  size        Int
+  status      IngestionJobStatus @default(QUEUED)
+  progress    Int                @default(0)
+  stage       String             @default("queued")
+  attempts    Int                @default(0)
+  error       String?
+  payload     Json?
+  workspace   Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@index([workspaceId, status])
+  @@index([createdAt])
 }
 
 model Document {

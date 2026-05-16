@@ -3,6 +3,7 @@ import { analyzeDocument } from "@/lib/knowledge";
 import { parseUploadedFile } from "@/lib/server/document-parser";
 import { isDatabaseConfigured } from "@/lib/server/prisma";
 import { appendWorkspaceDocuments } from "@/lib/server/workspace-store";
+import { enqueueIngestionFile } from "@/lib/server/ingestion-queue";
 
 export const runtime = "nodejs";
 
@@ -12,6 +13,15 @@ export async function POST(request: Request) {
 
   if (files.length === 0) {
     return NextResponse.json({ error: "No files provided" }, { status: 400 });
+  }
+
+  if (isDatabaseConfigured() && process.env.REDIS_URL) {
+    try {
+      const jobs = await Promise.all(files.map((file) => enqueueIngestionFile(file)));
+      return NextResponse.json({ documents: [], jobs, persistence: { mode: "queued" } }, { status: 202 });
+    } catch (error) {
+      console.error("Ingestion enqueue failed; falling back to synchronous analysis", error);
+    }
   }
 
   const documents = await Promise.all(

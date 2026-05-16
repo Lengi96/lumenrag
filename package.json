@@ -12,11 +12,14 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "seed:demo": "prisma generate && node scripts/seed-demo.mjs"
+    "seed:demo": "prisma generate && node scripts/seed-demo.mjs",
+    "worker:ingest": "tsx scripts/ingestion-worker.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.18.0",
+    "bullmq": "^5.76.8",
     "clsx": "^2.1.1",
+    "ioredis": "^5.10.1",
     "lucide-react": "^1.14.0",
     "mammoth": "^1.12.0",
     "next": "16.2.6",
