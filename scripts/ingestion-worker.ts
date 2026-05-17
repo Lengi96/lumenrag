@@ -1,19 +1,19 @@
-import { Worker } from "bullmq";
+import { Worker, type Job } from "bullmq";
 import { IngestionJobStatus } from "@prisma/client";
-import { analyzeDocument } from "../src/lib/knowledge.ts";
-import { extractStructuredKnowledge } from "../src/lib/ai/langchain-extraction-provider.ts";
-import { applyStructuredExtraction } from "../src/lib/ai/structured-extraction.ts";
-import { parseUploadedBuffer } from "../src/lib/server/document-parser.ts";
-import { appendWorkspaceDocuments } from "../src/lib/server/workspace-store.ts";
-import { ingestionQueueName, updateIngestionJob } from "../src/lib/server/ingestion-queue.ts";
-import { prisma } from "../src/lib/server/prisma.ts";
+import { analyzeDocument } from "../src/lib/knowledge";
+import { extractStructuredKnowledge } from "../src/lib/ai/langchain-extraction-provider";
+import { applyStructuredExtraction } from "../src/lib/ai/structured-extraction";
+import { parseUploadedBuffer } from "../src/lib/server/document-parser";
+import { appendWorkspaceDocuments } from "../src/lib/server/workspace-store";
+import { ingestionQueueName, updateIngestionJob, type IngestionJobPayload } from "../src/lib/server/ingestion-queue";
+import { prisma } from "../src/lib/server/prisma";
 
 const connection = {
   url: process.env.REDIS_URL ?? "redis://localhost:6379",
   maxRetriesPerRequest: null,
 };
 
-function stableId(input) {
+function stableId(input: string) {
   let hash = 0;
   for (let index = 0; index < input.length; index += 1) {
     hash = (hash << 5) - hash + input.charCodeAt(index);
@@ -22,7 +22,7 @@ function stableId(input) {
   return Math.abs(hash).toString(36);
 }
 
-async function setProgress(jobId, progress, stage) {
+async function setProgress(jobId: string, progress: number, stage: string) {
   await updateIngestionJob(jobId, {
     status: IngestionJobStatus.PROCESSING,
     progress,
@@ -32,7 +32,7 @@ async function setProgress(jobId, progress, stage) {
 
 const worker = new Worker(
   ingestionQueueName,
-  async (job) => {
+  async (job: Job<IngestionJobPayload>) => {
     const payload = job.data;
     const existing = await prisma.ingestionJob.findUnique({ where: { id: payload.jobId } });
     if (!existing || existing.status === IngestionJobStatus.CANCELED) return;
